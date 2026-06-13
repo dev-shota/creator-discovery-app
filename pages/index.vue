@@ -7,7 +7,7 @@
       <input
         v-model="searchQuery"
         type="text"
-        placeholder="スタッフ名を入力（例: 井上雄彦）"
+        placeholder="スタッフ名（漢字・かな・ローマ字）　例: 井上雄彦 / いのうえ / inoue"
         style="flex: 1; padding: 0.5rem; font-size: 1rem;"
         @keyup.enter="searchStaff"
       />
@@ -31,6 +31,12 @@
         {{ staff.name.native || staff.name.full }}
         <span v-if="staff.name.native" style="color: #666; font-size: 0.9rem;">
           ({{ staff.name.full }})
+        </span>
+        <span
+          v-if="staff.primaryOccupations.length > 0"
+          style="margin-left: 0.5rem; font-size: 0.75rem; color: #999; background: #f0f0f0; padding: 0.1rem 0.4rem; border-radius: 3px;"
+        >
+          {{ staff.primaryOccupations.map(o => OCCUPATION_MAP[o] ?? o).join('、') }}
         </span>
       </li>
     </ul>
@@ -89,13 +95,37 @@
 </template>
 
 <script setup lang="ts">
+import { toRomaji } from 'wanakana'
+
 const ANILIST = 'https://graphql.anilist.co'
 
 const STAFF_ROLE_FILTER = ['Story & Art', 'Story', 'Original Creator']
 
+// 職業の日本語マップ
+const OCCUPATION_MAP: Record<string, string> = {
+  'Mangaka': '漫画家',
+  'Voice Actor': '声優',
+  'Director': '監督',
+  'Writer': '脚本',
+  'Animator': 'アニメーター',
+}
+
+// 制作系職業（声優より上に出す）
+const CREATOR_OCCUPATIONS = new Set([
+  'Director', 'Writer', 'Artist', 'Animator',
+  'Character Design', 'Story', 'Original Creator', 'Illustrator',
+])
+
+function occupationScore(occupations: string[]): number {
+  if (occupations.includes('Mangaka')) return 0
+  if (occupations.some(o => CREATOR_OCCUPATIONS.has(o))) return 1
+  return 2
+}
+
 interface StaffCandidate {
   id: number
   name: { full: string; native: string | null }
+  primaryOccupations: string[]
 }
 
 interface WorkEdge {
@@ -118,25 +148,63 @@ const searchError = ref('')
 const worksError = ref('')
 const worksLoading = ref(false)
 
+// Debounce state
+let debounceTimer: ReturnType<typeof setTimeout> | null = null
+let requestSeq = 0
+
 // Helpers
 function displayTitle(title: WorkEdge['node']['title']) {
   return title.native || title.romaji || title.english || '(タイトル不明)'
 }
 
-// Query 1: Staff search
+// Query 1: Staff search (immediate — Enter / button)
 async function searchStaff() {
-  if (!searchQuery.value.trim()) return
+  if (debounceTimer !== null) {
+    clearTimeout(debounceTimer)
+    debounceTimer = null
+  }
+  await executeSearch()
+}
+
+// Live search: debounced watch
+watch(searchQuery, (newVal) => {
+  if (debounceTimer !== null) clearTimeout(debounceTimer)
+  if (newVal.trim().length < 2) {
+    // 入力が短い場合は候補をクリアして終了
+    staffCandidates.value = []
+    searchError.value = ''
+    return
+  }
+  debounceTimer = setTimeout(() => {
+    debounceTimer = null
+    executeSearch()
+  }, 300)
+})
+
+async function executeSearch() {
+  const q = searchQuery.value.trim()
+  if (!q) return
+
+  // かな（ひらがな/カタカナ）入力はローマ字に変換して検索する。
+  // AniList はかな→漢字の変換をしないため、"いのうえ"/"イノウエ" は
+  // そのままでは漢字名にマッチしない。ローマ字 "inoue" にすると当たる。
+  const term = /[぀-ヿ]/.test(q) ? toRomaji(q) : q
+
   searchError.value = ''
   staffCandidates.value = []
   selectedStaff.value = null
   filteredWorks.value = []
 
+  // stale レスポンス対策: このリクエストの連番を記録
+  const mySeq = ++requestSeq
+
   const query = `
     query($s: String) {
-      Page(perPage: 10) {
+      Page(perPage: 20) {
         staff(search: $s) {
           id
           name { full native }
+          primaryOccupations
         }
       }
     }
@@ -144,13 +212,29 @@ async function searchStaff() {
   try {
     const data = await $fetch<{ data: { Page: { staff: StaffCandidate[] } } }>(ANILIST, {
       method: 'POST',
-      body: { query, variables: { s: searchQuery.value.trim() } }
+      body: { query, variables: { s: term } }
     })
-    staffCandidates.value = data.data.Page.staff
+
+    // 古いレスポンスは捨てる
+    if (mySeq !== requestSeq) return
+
+    const raw = data.data.Page.staff
+
+    // 安定ソート: Mangaka→0 / 制作系→1 / それ以外→2
+    const sorted = raw
+      .map((s, idx) => ({ s, idx }))
+      .sort((a, b) => {
+        const diff = occupationScore(a.s.primaryOccupations) - occupationScore(b.s.primaryOccupations)
+        return diff !== 0 ? diff : a.idx - b.idx
+      })
+      .map(({ s }) => s)
+
+    staffCandidates.value = sorted
     if (staffCandidates.value.length === 0) {
       searchError.value = '候補が見つかりませんでした。'
     }
   } catch (e) {
+    if (mySeq !== requestSeq) return
     searchError.value = '検索中にエラーが発生しました。'
   }
 }

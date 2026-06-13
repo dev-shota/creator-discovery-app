@@ -9,10 +9,13 @@
     "preview": "nuxt preview"
   },
   "devDependencies": {
-    "nuxt": "^3.17.0",
     "@nuxt/typescript-build": "^3.0.0",
+    "nuxt": "^3.17.0",
     "typescript": "^5.8.0",
     "vue": "^3.5.0",
     "vue-router": "^4.5.0"
+  },
+  "dependencies": {
+    "wanakana": "^5.3.1"
   }
 }
