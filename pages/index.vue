@@ -1,6 +1,11 @@
 <template>
   <div class="page-container">
-    <h1>Creator Discovery</h1>
+    <header class="site-header">
+      <h1>Creator Discovery</h1>
+      <p class="page-description">
+        好きな漫画家・原作者を検索して、その人の作品とアニメ化した制作会社をたどれる discovery ツールです。
+      </p>
+    </header>
 
     <!-- Search Box -->
     <div class="search-row">
@@ -44,6 +49,7 @@
       </h2>
 
       <p v-if="worksError" class="status-error">{{ worksError }}</p>
+      <p v-if="worksNotice" class="status-notice">{{ worksNotice }}</p>
 
       <div v-if="filteredWorks.length > 0" class="works-grid">
         <div
@@ -86,6 +92,14 @@
                 @click="toggleStudios(edge.node.id)"
               >{{ expandedStudios.has(edge.node.id) ? '閉じる' : '+' + (studioBadges[edge.node.id].length - 2) }}</button>
             </div>
+            <!-- 購入導線（R4 シーム）。中立リンク（タグ無し）。affiliateTag を
+                 設定するとアフィリエイト化＋下部に開示文が出る。 -->
+            <a
+              :href="purchaseLink(edge.node.title)"
+              target="_blank"
+              :rel="purchaseRel"
+              class="work-card-buy"
+            >Amazon で探す</a>
           </div>
         </div>
       </div>
@@ -94,13 +108,76 @@
         表示対象の作品が見つかりませんでした（staffRole フィルタ適用済み）。
       </p>
     </div>
+
+    <!-- Footer: AniList 非公式帰属（必須・常時） + アフィリエイト開示（タグ有効時のみ） -->
+    <footer class="site-footer">
+      <p class="footer-attribution">
+        Data from
+        <a href="https://anilist.co" target="_blank" rel="noopener">AniList</a>.
+        本サイトは非公式の個人プロジェクトであり、AniList とは一切関係ありません。
+        カバー画像は AniList の画像を直接参照（hotlink）しています。
+      </p>
+      <p v-if="affiliateActive" class="footer-disclosure">
+        ※ 当サイトのリンクには Amazon アソシエイト等のアフィリエイトリンクが含まれます。
+        リンク経由で商品が購入された場合、当サイトが収益を得ることがあります。
+      </p>
+    </footer>
   </div>
 </template>
 
 <script setup lang="ts">
 import { toRomaji, toHiragana, toKatakana } from 'wanakana'
 
-const ANILIST = 'https://graphql.anilist.co'
+// ── Config（R1: エンドポイントは runtimeConfig.public に一本化）─────────────
+const config = useRuntimeConfig()
+const ANILIST = config.public.anilistEndpoint as string
+const SITE_URL = ((config.public.siteUrl as string) || '').replace(/\/$/, '')
+const AFFILIATE_TAG = (config.public.affiliateTag as string) || ''
+const affiliateActive = computed(() => AFFILIATE_TAG.length > 0)
+
+// ── SEO / OGP / favicon（R2）──────────────────────────────────────────────
+const SITE_TITLE = 'Creator Discovery — 漫画家から作品をたどる'
+const SITE_DESC =
+  '好きな漫画家・原作者を検索して、その作品とアニメ化した制作会社をたどれる discovery ツール。データは AniList。'
+// OGP 画像は絶対 URL が望ましい。公開ドメインが分かれば SITE_URL で絶対化する。
+const OG_IMAGE = SITE_URL ? `${SITE_URL}/og-image.png` : '/og-image.png'
+useHead({
+  title: SITE_TITLE,
+  meta: [
+    { name: 'description', content: SITE_DESC },
+    { property: 'og:title', content: SITE_TITLE },
+    { property: 'og:description', content: SITE_DESC },
+    { property: 'og:type', content: 'website' },
+    { property: 'og:image', content: OG_IMAGE },
+    ...(SITE_URL ? [{ property: 'og:url', content: SITE_URL }] : []),
+    { name: 'twitter:card', content: 'summary_large_image' },
+    { name: 'twitter:title', content: SITE_TITLE },
+    { name: 'twitter:description', content: SITE_DESC },
+    { name: 'twitter:image', content: OG_IMAGE }
+  ]
+})
+
+// ── レート上限（429）の親切表示（R2）───────────────────────────────────────
+const RATE_LIMIT_MSG =
+  'AniList のレート上限に達しました（1分あたりのリクエスト数の上限）。少し待ってから再試行してください。'
+
+// $fetch が投げる FetchError から 429 を判定する
+function isRateLimited(e: unknown): boolean {
+  const err = e as { statusCode?: number; status?: number; response?: { status?: number } }
+  const code = err?.statusCode ?? err?.status ?? err?.response?.status
+  return code === 429
+}
+
+// 作品タイトルから購入導線（Amazon.co.jp 検索）を生成。タグが空なら中立リンク。
+function purchaseLink(title: WorkEdge['node']['title']): string {
+  const q = title.native || title.romaji || title.english || ''
+  const url = `https://www.amazon.co.jp/s?k=${encodeURIComponent(q)}`
+  return AFFILIATE_TAG ? `${url}&tag=${AFFILIATE_TAG}` : url
+}
+// アフィリエイト有効時だけ sponsored を付ける（中立時は nofollow のみ）
+const purchaseRel = computed(() =>
+  affiliateActive.value ? 'noopener nofollow sponsored' : 'noopener nofollow'
+)
 
 const STAFF_ROLE_FILTER = ['Story & Art', 'Story', 'Original Creator']
 
@@ -169,6 +246,7 @@ function toggleStudios(id: number) {
 
 const searchError = ref('')
 const worksError = ref('')
+const worksNotice = ref('') // 非ブロッキングの案内（例: studio がレート上限で省略）
 const worksLoading = ref(false)
 
 // Debounce state
@@ -217,15 +295,16 @@ const SEARCH_QUERY = `
 `
 
 // 1 表記ぶんの検索。失敗しても [] を返してマージを止めない。
-async function fetchStaff(term: string): Promise<StaffCandidate[]> {
+// 429（レート上限）だけは握り潰さず呼び出し側へ伝える。
+async function fetchStaff(term: string): Promise<{ staff: StaffCandidate[]; rateLimited: boolean }> {
   try {
     const data = await $fetch<{ data: { Page: { staff: StaffCandidate[] } } }>(ANILIST, {
       method: 'POST',
       body: { query: SEARCH_QUERY, variables: { s: term } }
     })
-    return data.data.Page.staff
-  } catch {
-    return []
+    return { staff: data.data.Page.staff, rateLimited: false }
+  } catch (e) {
+    return { staff: [], rateLimited: isRateLimited(e) }
   }
 }
 
@@ -256,10 +335,12 @@ async function executeSearch() {
   // 古いレスポンスは捨てる
   if (mySeq !== requestSeq) return
 
+  const anyRateLimited = batches.some(b => b.rateLimited)
+
   // id で重複排除して統合
   const byId = new Map<number, StaffCandidate>()
   for (const batch of batches) {
-    for (const s of batch) if (!byId.has(s.id)) byId.set(s.id, s)
+    for (const s of batch.staff) if (!byId.has(s.id)) byId.set(s.id, s)
   }
 
   // ── (A) Filter + Sort ──────────────────────────────────────────────────────
@@ -301,7 +382,8 @@ async function executeSearch() {
   // ──────────────────────────────────────────────────────────────────────────
 
   if (staffCandidates.value.length === 0) {
-    searchError.value = '候補が見つかりませんでした。'
+    // 全表記が 429 で空なら「見つからない」ではなくレート上限を案内する
+    searchError.value = anyRateLimited ? RATE_LIMIT_MSG : '候補が見つかりませんでした。'
   }
 }
 
@@ -316,6 +398,7 @@ async function selectStaff(staff: StaffCandidate) {
   studioBadges.value = {}
   expandedStudios.value = new Set()
   worksError.value = ''
+  worksNotice.value = ''
   worksLoading.value = true
 
   const query = `
@@ -355,7 +438,9 @@ async function selectStaff(staff: StaffCandidate) {
     await loadStudioBadges(works, mySeq)
   } catch (e) {
     if (mySeq !== selectSeq) return
-    worksError.value = '作品の取得中にエラーが発生しました。'
+    worksError.value = isRateLimited(e)
+      ? RATE_LIMIT_MSG
+      : '作品の取得中にエラーが発生しました。少し待ってから再試行してください。'
     worksLoading.value = false
   }
 }
@@ -428,8 +513,14 @@ async function loadStudioBadges(works: WorkEdge[], mySeq: number) {
       if (sorted.length) badges[mangaId] = sorted
     }
     studioBadges.value = badges
-  } catch {
-    // studio 取得失敗時はバッジ無しで継続（グリッドは保持）
+  } catch (e) {
+    if (mySeq !== selectSeq) return
+    // studio 取得失敗時はバッジ無しで継続（グリッドは保持）。
+    // 429 のときだけ、なぜバッジが出ないかを非ブロッキングで案内する。
+    if (isRateLimited(e)) {
+      worksNotice.value =
+        'アニメ化（制作会社）情報は AniList のレート上限のため省略しました。少し待つと表示されます。'
+    }
   }
 }
 </script>

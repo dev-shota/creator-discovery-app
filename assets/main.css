@@ -299,10 +299,124 @@ button.studio-badge {
   font-size: 14px;
 }
 
+/* 非ブロッキングの案内（レート上限で studio 省略 等） */
+.status-notice {
+  color: var(--muted-strong);
+  background: var(--parchment);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 13px;
+  margin-top: 12px;
+}
+
 /* ── Works heading loading indicator ── */
 .works-loading-indicator {
   font-size: 14px;
   font-weight: 400;
   color: var(--muted);
   margin-left: 8px;
+}
+
+/* ── Header / description ── */
+.site-header {
+  margin-bottom: 32px;
+}
+
+.site-header h1 {
+  margin-bottom: 12px;
+}
+
+.page-description {
+  color: var(--muted-strong);
+  font-size: 17px;
+  line-height: 1.5;
+  max-width: 640px;
+}
+
+/* ── Purchase link (affiliate seam — neutral by default) ── */
+.work-card-buy {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.work-card-buy::after {
+  content: " ↗";
+  font-size: 10px;
+}
+
+.work-card-buy:hover {
+  text-decoration: underline;
+}
+
+/* ── Footer ── */
+.site-footer {
+  margin-top: 64px;
+  padding-top: 24px;
+  border-top: 1px solid var(--divider);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.site-footer a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.site-footer a:hover {
+  text-decoration: underline;
+}
+
+.footer-disclosure {
+  margin-top: 8px;
+}
+
+/* ── Responsive (mobile) ── */
+@media (max-width: 640px) {
+  .page-container {
+    padding: 28px 16px;
+  }
+
+  h1 {
+    font-size: 34px;
+    letter-spacing: -0.5px;
+    margin-bottom: 20px;
+  }
+
+  h2 {
+    font-size: 22px;
+  }
+
+  .page-description {
+    font-size: 15px;
+  }
+
+  /* グリッドはより小さい最小幅で崩れを防ぐ（狭幅でも2列を維持しやすく） */
+  .works-grid {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 14px;
+  }
+
+  .search-input,
+  .search-btn {
+    font-size: 16px; /* iOS のズーム発火（<16px）を防ぐ */
+  }
+
+  .occupation-tag {
+    /* 狭幅で候補名を押し出さないよう、タグを縮める */
+    font-size: 11px;
+    padding: 3px 9px;
+  }
+}
+
+/* 320px 級の極狭幅: 1列にして潰れを防ぐ */
+@media (max-width: 360px) {
+  .works-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
 }

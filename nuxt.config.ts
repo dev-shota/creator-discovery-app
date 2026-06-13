@@ -8,7 +8,10 @@ export default defineNuxtConfig({
   css: ['~/assets/main.css'],
   app: {
     head: {
+      htmlAttrs: { lang: 'ja' },
       link: [
+        // favicon（public/favicon.svg）
+        { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
         {
           rel: 'preconnect',
           href: 'https://fonts.googleapis.com'
@@ -25,9 +28,20 @@ export default defineNuxtConfig({
       ]
     }
   },
+  // runtimeConfig.public は SSG では generate 時にビルドへ焼き込まれる。
+  // 値は NUXT_PUBLIC_* 環境変数で generate 直前に上書きできる（Cloudflare Pages の
+  // build 環境変数で設定可能）。コードは必ずここを単一の真実として参照する。
   runtimeConfig: {
     public: {
-      anilistEndpoint: 'https://graphql.anilist.co'
+      // AniList GraphQL エンドポイント（R1: 直書き定数を廃しここへ寄せた）
+      anilistEndpoint: 'https://graphql.anilist.co',
+      // 公開ドメイン。設定すると OGP 画像を絶対 URL にする（共有カード互換性）。
+      // 例: NUXT_PUBLIC_SITE_URL=https://creator-discovery.pages.dev
+      siteUrl: '',
+      // アフィリエイトの構造的シーム（R4）。空＝中立（タグ無し・コミッション無し）。
+      // 有効化は RED（外向き・不可逆）: Amazon アソシエイト承認後に
+      // NUXT_PUBLIC_AFFILIATE_TAG=yourtag-22 を generate 環境に設定するだけ。
+      affiliateTag: ''
     }
   }
 })
