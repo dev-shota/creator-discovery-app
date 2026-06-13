@@ -1,0 +1,259 @@
+/* ─────────────────────────────────────────
+   Creator Discovery — global design tokens
+   ───────────────────────────────────────── */
+
+:root {
+  /* Canvas / surfaces */
+  --canvas: #faf9f5;
+  --surface-soft: #f5f0e8;
+  --surface-card: #efe9de;
+
+  /* Ink */
+  --ink: #141413;
+  --body: #3d3d3a;
+  --muted: #6c6a64;
+  --muted-soft: #8e8b82;
+
+  /* Brand */
+  --primary: #cc785c;
+  --primary-active: #a9583e;
+  --on-primary: #fff;
+
+  /* Structure */
+  --hairline: #e6dfd8;
+  --error: #c64545;
+
+  /* Radius */
+  --radius-input: 8px;
+  --radius-card: 12px;
+  --radius-pill: 9999px;
+}
+
+/* ── Reset / Base ── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  background: var(--canvas);
+  color: var(--body);
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Typography ── */
+h1 {
+  font-family: 'Newsreader', 'EB Garamond', Georgia, 'Times New Roman', serif;
+  font-size: clamp(32px, 5vw, 44px);
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: -1px;
+  color: var(--ink);
+  margin-bottom: 24px;
+}
+
+h2 {
+  font-family: 'Newsreader', 'EB Garamond', Georgia, 'Times New Roman', serif;
+  font-size: 24px;
+  font-weight: 400;
+  letter-spacing: -0.5px;
+  color: var(--ink);
+  margin-bottom: 16px;
+}
+
+a {
+  color: inherit;
+}
+
+/* ── Layout ── */
+.page-container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+/* ── Search row ── */
+.search-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.search-input {
+  flex: 1;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-input);
+  padding: 10px 14px;
+  height: 40px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--body);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.search-input::placeholder {
+  color: var(--muted-soft);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(204, 120, 92, 0.15);
+}
+
+.search-btn {
+  background: var(--primary);
+  color: var(--on-primary);
+  border: none;
+  border-radius: var(--radius-input);
+  padding: 0 20px;
+  height: 40px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.search-btn:hover {
+  background: var(--primary-active);
+}
+
+.search-btn:active {
+  background: var(--primary-active);
+}
+
+/* ── Candidate list ── */
+.candidate-list {
+  list-style: none;
+  background: #fff;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  max-height: 360px;
+  overflow-y: auto;
+  margin-bottom: 24px;
+}
+
+.candidate-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--hairline);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.candidate-item:last-child {
+  border-bottom: none;
+}
+
+.candidate-item:hover {
+  background: var(--surface-soft);
+}
+
+.candidate-item.is-selected {
+  background: rgba(204, 120, 92, 0.12);
+}
+
+.candidate-name-native {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.candidate-name-full {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.occupation-tag {
+  background: var(--surface-card);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: var(--radius-pill);
+  padding: 4px 12px;
+  white-space: nowrap;
+}
+
+/* ── Works section ── */
+.works-section {
+  margin-top: 8px;
+}
+
+.works-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
+}
+
+.work-card {
+  background: #fff;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+
+.work-card-cover {
+  width: 100%;
+  display: block;
+}
+
+.work-card-body {
+  padding: 12px;
+}
+
+.work-card-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ink);
+  text-decoration: none;
+  display: block;
+  line-height: 1.35;
+}
+
+.work-card-title:hover {
+  text-decoration: underline;
+}
+
+.work-card-year {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.work-card-role {
+  font-size: 12px;
+  color: var(--muted-soft);
+  margin-top: 2px;
+}
+
+/* ── Status text ── */
+.status-loading,
+.status-empty {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.status-error {
+  color: var(--error);
+  font-size: 14px;
+}
+
+/* ── Works heading loading indicator ── */
+.works-loading-indicator {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--muted);
+  margin-left: 8px;
+}
