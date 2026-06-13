@@ -236,7 +236,10 @@ async function executeSearch() {
   const filtered = [...byId.values()].filter((c, _idx) => {
     // relevance: いずれかの term が name (native + full) に部分一致
     const fullName = ((c.name.native ?? '') + ' ' + (c.name.full ?? '')).toLowerCase()
-    const isRelevant = queryForms.some(qf => fullName.includes(qf))
+    const isRelevant = queryForms.some(qf => {
+      const toks = qf.split(/\s+/).filter(Boolean)
+      return toks.length > 0 && toks.every(tok => fullName.includes(tok))
+    })
 
     // 非・純声優: 職業データがあって全部 Voice Actor / Vocalist だけの人を除外
     const isPureVA = c.primaryOccupations.length > 0 && occupationScore(c.primaryOccupations) === 2
