@@ -72,7 +72,20 @@
               {{ edge.node.startDate?.year ?? '年不明' }}
             </div>
             <div class="work-card-role">{{ edge.staffRole }}</div>
-            <!-- TODO: studio バッジ (relationType==ADAPTATION かつ type==ANIME の制作会社) はスコープ外 -->
+            <div v-if="studioBadges[edge.node.id]?.length" class="work-card-studios">
+              <span class="work-card-studios-label">アニメ化</span>
+              <span
+                v-for="name in visibleStudios(edge.node.id)"
+                :key="name"
+                class="studio-badge"
+              >{{ name }}</span>
+              <button
+                v-if="studioBadges[edge.node.id].length > 2"
+                type="button"
+                class="studio-badge studio-badge-more"
+                @click="toggleStudios(edge.node.id)"
+              >{{ expandedStudios.has(edge.node.id) ? '閉じる' : '+' + (studioBadges[edge.node.id].length - 2) }}</button>
+            </div>
           </div>
         </div>
       </div>
@@ -121,10 +134,14 @@ interface StaffCandidate {
 interface WorkEdge {
   staffRole: string
   node: {
+    id: number
     title: { native: string | null; romaji: string | null; english: string | null }
     startDate: { year: number | null } | null
     coverImage: { medium: string } | null
     siteUrl: string
+    relations: {
+      edges: { relationType: string; node: { id: number; type: string } }[]
+    }
   }
 }
 
@@ -133,6 +150,22 @@ const searchQuery = ref('')
 const staffCandidates = ref<StaffCandidate[]>([])
 const selectedStaff = ref<StaffCandidate | null>(null)
 const filteredWorks = ref<WorkEdge[]>([])
+// manga node id → アニメ化した制作会社名（頻度順）
+const studioBadges = ref<Record<number, string[]>>({})
+// +N を押して制作会社を全件展開中の manga node id
+const expandedStudios = ref<Set<number>>(new Set())
+
+// 表示する制作会社：展開中は全件、それ以外は上位2件
+function visibleStudios(id: number): string[] {
+  const all = studioBadges.value[id] ?? []
+  return expandedStudios.value.has(id) ? all : all.slice(0, 2)
+}
+
+function toggleStudios(id: number) {
+  const next = new Set(expandedStudios.value)
+  next.has(id) ? next.delete(id) : next.add(id)
+  expandedStudios.value = next
+}
 
 const searchError = ref('')
 const worksError = ref('')
@@ -272,10 +305,16 @@ async function executeSearch() {
   }
 }
 
+// 古い選択のレスポンスでバッジ/作品を上書きしないための連番
+let selectSeq = 0
+
 // Query 2: Works by selected staff
 async function selectStaff(staff: StaffCandidate) {
+  const mySeq = ++selectSeq
   selectedStaff.value = staff
   filteredWorks.value = []
+  studioBadges.value = {}
+  expandedStudios.value = new Set()
   worksError.value = ''
   worksLoading.value = true
 
@@ -287,10 +326,12 @@ async function selectStaff(staff: StaffCandidate) {
           edges {
             staffRole
             node {
+              id
               title { native romaji english }
               startDate { year }
               coverImage { medium }
               siteUrl
+              relations { edges { relationType node { id type } } }
             }
           }
         }
@@ -304,14 +345,91 @@ async function selectStaff(staff: StaffCandidate) {
       method: 'POST',
       body: { query, variables: { id: staff.id } }
     })
-    const edges = data.data.Staff.staffMedia.edges
-    filteredWorks.value = edges.filter(edge =>
+    if (mySeq !== selectSeq) return
+    const works = data.data.Staff.staffMedia.edges.filter(edge =>
       STAFF_ROLE_FILTER.some(role => edge.staffRole.includes(role))
     )
-  } catch (e) {
-    worksError.value = '作品の取得中にエラーが発生しました。'
-  } finally {
+    filteredWorks.value = works
     worksLoading.value = false
+    // 作品グリッドは即表示し、アニメ化バッジは後追いで差し込む（best-effort）
+    await loadStudioBadges(works, mySeq)
+  } catch (e) {
+    if (mySeq !== selectSeq) return
+    worksError.value = '作品の取得中にエラーが発生しました。'
+    worksLoading.value = false
+  }
+}
+
+// ── Studio badges ───────────────────────────────────────────────────────────
+// AniList は relations 配下の studios をネスト取得すると 500 を返す（relation
+// ノード1つにつき1エラー＝既知の制約）。そこで2フェーズ目として、表示作品の
+// ADAPTATION→ANIME の media id を集め、その制作会社を id_in で一括取得する。
+const STUDIO_QUERY = `
+  query($ids: [Int]) {
+    Page(perPage: 50) {
+      media(id_in: $ids, type: ANIME) {
+        id
+        studios(isMain: true) { nodes { name isAnimationStudio } }
+      }
+    }
+  }
+`
+
+interface StudioNode { name: string; isAnimationStudio: boolean }
+
+// anime media id → 主要制作会社名（アニメ制作会社を優先）。id は 50 件ずつ分割。
+async function fetchStudiosByAnime(ids: number[]): Promise<Map<number, string[]>> {
+  const out = new Map<number, string[]>()
+  for (let i = 0; i < ids.length; i += 50) {
+    const chunk = ids.slice(i, i + 50)
+    const data = await $fetch<{
+      data: { Page: { media: { id: number; studios: { nodes: StudioNode[] } }[] } }
+    }>(ANILIST, {
+      method: 'POST',
+      body: { query: STUDIO_QUERY, variables: { ids: chunk } }
+    })
+    for (const m of data.data.Page.media) {
+      const anim = m.studios.nodes.filter(n => n.isAnimationStudio).map(n => n.name)
+      // isMain は通常アニメ制作会社。フラグが付かない時だけ全 main にフォールバック
+      out.set(m.id, anim.length ? anim : m.studios.nodes.map(n => n.name))
+    }
+  }
+  return out
+}
+
+// 表示中の各作品に「アニメ化した制作会社」バッジを解決する。
+async function loadStudioBadges(works: WorkEdge[], mySeq: number) {
+  const animeIdsByManga = new Map<number, number[]>()
+  const allAnimeIds = new Set<number>()
+  for (const edge of works) {
+    const ids = (edge.node.relations?.edges ?? [])
+      .filter(r => r.relationType === 'ADAPTATION' && r.node.type === 'ANIME')
+      .map(r => r.node.id)
+    if (ids.length) {
+      animeIdsByManga.set(edge.node.id, ids)
+      ids.forEach(id => allAnimeIds.add(id))
+    }
+  }
+  if (allAnimeIds.size === 0) return
+
+  try {
+    const studioByAnime = await fetchStudiosByAnime([...allAnimeIds])
+    if (mySeq !== selectSeq) return
+    const badges: Record<number, string[]> = {}
+    for (const [mangaId, animeIds] of animeIdsByManga) {
+      const counts = new Map<string, number>()
+      for (const aid of animeIds) {
+        for (const name of studioByAnime.get(aid) ?? []) {
+          counts.set(name, (counts.get(name) ?? 0) + 1)
+        }
+      }
+      // 劇場版などで複数社あるとき、最頻＝その作品の主たる制作会社を先頭に
+      const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([n]) => n)
+      if (sorted.length) badges[mangaId] = sorted
+    }
+    studioBadges.value = badges
+  } catch {
+    // studio 取得失敗時はバッジ無しで継続（グリッドは保持）
   }
 }
 </script>

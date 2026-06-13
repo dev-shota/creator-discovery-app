@@ -247,6 +247,46 @@ a {
   margin-top: 2px;
 }
 
+/* ── Studio (anime adaptation) badges ── */
+.work-card-studios {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.work-card-studios-label {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.studio-badge {
+  background: rgba(0, 102, 204, 0.1);
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 9999px;
+  padding: 2px 9px;
+  white-space: nowrap;
+}
+
+button.studio-badge {
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.studio-badge-more {
+  background: var(--parchment);
+  color: var(--muted-strong);
+  transition: background 0.12s;
+}
+
+.studio-badge-more:hover {
+  background: var(--hairline);
+}
+
 /* ── Status text ── */
 .status-loading,
 .status-empty {
