@@ -40,6 +40,16 @@ npm run dev
 - AniList の `relations` 配下に `studios` をネストすると 500 になる（既知の制約）。
   studio は2フェーズで取る（漫画の `relations` から ADAPTATION×ANIME の id を集め、別クエリで `Page.media(id_in:…)` の studios を一括取得）。`pages/index.vue` のこの形を壊さない。
 
+## デザイン
+
+遊び心のある有機的（playful / organic）な方向。参考は動画「Claude Design × GPT image 2」
+（shin-sibainu / PLAY/GROUND）。柔らかい抽象シェイプがふわっと浮く・余白広め・丸み・パステル。
+
+- パレット: pink `#ED3A8C` / yellow `#EFF33C` / teal `#2DC7C0` / purple `#A78BFA`、白背景、インク `#2A2A33`。
+- フォント: 見出し/ロゴ `M PLUS Rounded 1c`、本文 `Zen Kaku Gothic New`、ワンポイント手書き `Caveat`。
+- 背景の有機シェイプは **CSS グラデーション＋float アニメで標準装備**（画像不要・`prefers-reduced-motion` 尊重）。
+- よりリッチにしたい時は **GPT image 2 で素材画像を作って差し替える**。プロンプト集と手順は `ASSET-PROMPTS.md`。
+
 ## ビルド & 静的出力
 
 ```bash

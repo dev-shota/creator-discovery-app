@@ -1,7 +1,16 @@
 <template>
   <div class="page-container">
+    <!-- 背景の有機的シェイプ（ふわふわ浮く・装飾のみ） -->
+    <div class="bg-decor" aria-hidden="true">
+      <span class="blob b1"></span>
+      <span class="blob b2"></span>
+      <span class="blob b3"></span>
+      <span class="blob b4"></span>
+    </div>
+
     <header class="site-header">
-      <h1>Creator Discovery</h1>
+      <span class="eyebrow">creator discovery</span>
+      <h1>作り手から、作品をたどる。</h1>
       <p class="page-description">
         好きな漫画家・原作者を検索して、その人の作品とアニメ化した制作会社をたどれる discovery ツールです。
       </p>

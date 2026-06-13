@@ -9,6 +9,9 @@
 - 全機能は `pages/index.vue`（単一ファイル）+ `assets/main.css`。バックエンド無し。
 - 設定は `nuxt.config.ts` の `runtimeConfig.public` に一本化（endpoint / siteUrl / affiliateTag）。
   コードは必ずここを参照する（直書き定数を新設しない）。
+- デザインは playful / organic（参考: 動画「Claude Design × GPT image 2」/ PLAY/GROUND）。
+  パレット pink/yellow/teal/purple・丸みフォント・有機シェイプ（CSS グラデ float・画像不要）。
+  画像素材を足す時は GPT image 2 用プロンプト＝`ASSET-PROMPTS.md`。カバー以外のオリジナル素材のみ。
 
 ## 技術的地雷（実コードで検証済み・壊さない）
 
