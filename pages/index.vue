@@ -95,7 +95,7 @@
 </template>
 
 <script setup lang="ts">
-import { toRomaji } from 'wanakana'
+import { toRomaji, toHiragana, toKatakana } from 'wanakana'
 
 const ANILIST = 'https://graphql.anilist.co'
 
@@ -181,14 +181,44 @@ watch(searchQuery, (newVal) => {
   }, 300)
 })
 
+const SEARCH_QUERY = `
+  query($s: String) {
+    Page(perPage: 20) {
+      staff(search: $s) {
+        id
+        name { full native }
+        primaryOccupations
+      }
+    }
+  }
+`
+
+// 1 表記ぶんの検索。失敗しても [] を返してマージを止めない。
+async function fetchStaff(term: string): Promise<StaffCandidate[]> {
+  try {
+    const data = await $fetch<{ data: { Page: { staff: StaffCandidate[] } } }>(ANILIST, {
+      method: 'POST',
+      body: { query: SEARCH_QUERY, variables: { s: term } }
+    })
+    return data.data.Page.staff
+  } catch {
+    return []
+  }
+}
+
 async function executeSearch() {
   const q = searchQuery.value.trim()
   if (!q) return
 
-  // かな（ひらがな/カタカナ）入力はローマ字に変換して検索する。
-  // AniList はかな→漢字の変換をしないため、"いのうえ"/"イノウエ" は
-  // そのままでは漢字名にマッチしない。ローマ字 "inoue" にすると当たる。
-  const term = /[぀-ヿ]/.test(q) ? toRomaji(q) : q
+  // 検索バリアント: AniList はかな→漢字も ひらがな↔カタカナ も変換しないので、
+  // 複数表記を投げて id で統合する:
+  //  - 生入力（その表記の native にヒット。例 ひらがな名「かきふらい」）
+  //  - ひら/カナ変換（カタカナ入力→ひらがな native。例 カキフライ→かきふらい）
+  //  - ローマ字（漢字 native を読みで拾う。例 いのうえ→inoue→井上雄彦）
+  const hasKana = /[぀-ヿ]/.test(q)
+  const terms = hasKana
+    ? [...new Set([q, toHiragana(q), toKatakana(q), toRomaji(q)])]
+    : [q]
 
   searchError.value = ''
   staffCandidates.value = []
@@ -198,44 +228,28 @@ async function executeSearch() {
   // stale レスポンス対策: このリクエストの連番を記録
   const mySeq = ++requestSeq
 
-  const query = `
-    query($s: String) {
-      Page(perPage: 20) {
-        staff(search: $s) {
-          id
-          name { full native }
-          primaryOccupations
-        }
-      }
-    }
-  `
-  try {
-    const data = await $fetch<{ data: { Page: { staff: StaffCandidate[] } } }>(ANILIST, {
-      method: 'POST',
-      body: { query, variables: { s: term } }
+  const batches = await Promise.all(terms.map(fetchStaff))
+
+  // 古いレスポンスは捨てる
+  if (mySeq !== requestSeq) return
+
+  // id で重複排除して統合
+  const byId = new Map<number, StaffCandidate>()
+  for (const batch of batches) {
+    for (const s of batch) if (!byId.has(s.id)) byId.set(s.id, s)
+  }
+
+  // 安定ソート: Mangaka→0 / 制作系→1 / それ以外→2
+  staffCandidates.value = [...byId.values()]
+    .map((s, idx) => ({ s, idx }))
+    .sort((a, b) => {
+      const diff = occupationScore(a.s.primaryOccupations) - occupationScore(b.s.primaryOccupations)
+      return diff !== 0 ? diff : a.idx - b.idx
     })
+    .map(({ s }) => s)
 
-    // 古いレスポンスは捨てる
-    if (mySeq !== requestSeq) return
-
-    const raw = data.data.Page.staff
-
-    // 安定ソート: Mangaka→0 / 制作系→1 / それ以外→2
-    const sorted = raw
-      .map((s, idx) => ({ s, idx }))
-      .sort((a, b) => {
-        const diff = occupationScore(a.s.primaryOccupations) - occupationScore(b.s.primaryOccupations)
-        return diff !== 0 ? diff : a.idx - b.idx
-      })
-      .map(({ s }) => s)
-
-    staffCandidates.value = sorted
-    if (staffCandidates.value.length === 0) {
-      searchError.value = '候補が見つかりませんでした。'
-    }
-  } catch (e) {
-    if (mySeq !== requestSeq) return
-    searchError.value = '検索中にエラーが発生しました。'
+  if (staffCandidates.value.length === 0) {
+    searchError.value = '候補が見つかりませんでした。'
   }
 }
 
