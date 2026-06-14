@@ -10,8 +10,13 @@
   --pink-2: #ff4fa0;
   --yellow: #eff33c;
   --yellow-2: #fff14b;
-  --teal: #2dc7c0;
+  --teal: #2dc7c0;   /* ブランドの明るいティール。ヒーロー見出しのアクセント（.ac-teal）と右の
+                       イラストの色を合わせる＝ヒーローの印象を保つ（ユーザー条件 2026-06-15(c)）。
+                       大字の装飾なので低コントラストの害は最小。 */
   --teal-2: #3dd4ce;
+  --teal-text: #15827b; /* 小さい機能テキスト用の読めるティール（白で 4.66:1＝AA 4.5 達成）。
+                          フッターのリンク・候補のメタ・おすすめ見出しなど小さいティール文字に使う。
+                          ヒーローの明るいティールは据え置き＝印象は変えずに読みやすさだけ上げる。 */
   --purple: #a78bfa;
   --purple-2: #8b7ae8;
 
@@ -734,7 +739,7 @@ a {
 .candidate-media-meta {
   font-size: 12px;
   font-weight: 700;
-  color: var(--teal);
+  color: var(--teal-text);
 }
 
 /* ── 最近見た作者チップ（ヒーロー下・控えめ） ── */
@@ -1190,7 +1195,7 @@ button.studio-badge {
 }
 
 .site-footer a {
-  color: var(--teal);
+  color: var(--teal-text);
   text-decoration: none;
   font-weight: 700;
 }
@@ -1620,7 +1625,7 @@ button.studio-badge {
 .recs-anchor {
   font-size: 13px;
   font-weight: 700;
-  color: var(--teal);
+  color: var(--teal-text);
   margin-left: 8px;
 }
 .recs-rail {

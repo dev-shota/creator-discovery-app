@@ -832,16 +832,18 @@ function isDirectorPerson(occ: string[]): boolean {
 function isVoicePerson(occ: string[]): boolean {
   return occ.some(o => o === 'Voice Actor')
 }
-// 脚本・原案モード（脚本家・シリーズ構成・キャラクター原案など）。実測 2026-06-15 の
-// occupation: 岡田麿里=['Scriptwriter']／虚淵玄=['Writer','Scriptwriter']／田中将賀=
-// ['Animator','Designer']／貞本義行=['Illustrator','Designer','Animator']／いとうのいぢ=
-// ['Illustrator','Designer']。脚本系は 'Scriptwriter'/'Writer'、キャラ原案系は
-// 'Designer'/'Illustrator'/'Character Design' で拾える。
-const CREATIVE_OCCUPATIONS = new Set([
-  'Scriptwriter', 'Writer', 'Series Composition', 'Character Design', 'Designer', 'Illustrator',
-])
-function isCreativeStaff(occ: string[]): boolean {
-  return occ.some(o => CREATIVE_OCCUPATIONS.has(o))
+// 「脚本」モードと「キャラ原案」モードを別タブに分けた（ユーザー判断 2026-06-15(c)）。実測の
+// occupation: 岡田麿里=['Scriptwriter']／虚淵玄=['Writer','Scriptwriter']／吉田玲子=['Scriptwriter']
+// ＝脚本系。田中将賀=['Animator','Designer']／貞本義行=['Illustrator','Designer','Animator']／
+// いとうのいぢ=['Illustrator','Designer']＝キャラ原案系。脚本系は 'Scriptwriter'/'Writer'/
+// 'Series Composition'、キャラ原案系は 'Character Design'/'Designer'/'Illustrator' で拾う。
+const WRITING_OCCUPATIONS = new Set(['Scriptwriter', 'Writer', 'Series Composition'])
+const CHARDESIGN_OCCUPATIONS = new Set(['Character Design', 'Designer', 'Illustrator'])
+function isWritingStaff(occ: string[]): boolean {
+  return occ.some(o => WRITING_OCCUPATIONS.has(o))
+}
+function isChardesignStaff(occ: string[]): boolean {
+  return occ.some(o => CHARDESIGN_OCCUPATIONS.has(o))
 }
 // creator=著者系のみ / director=監督系のみ / voice=声優のみ。occ 空（不明）は全モード残す。
 // 実測: 山田尚子=['Director','Storyboard Artist']→creator から除外・director で残す。
@@ -854,9 +856,10 @@ function matchesSearchMode(occ: string[], mode: SearchMode): boolean {
   // 声優は AniList でほぼ必ず 'Voice Actor' が付くので、声優モードは Voice Actor を必須に
   // してキャラを除外する（アイドル/バンドもの全般で同型＝けいおん固有でない）。
   if (mode === 'voice') return isVoicePerson(occ)
-  // 脚本・原案モードも occ 空を救わない（声優と同じ理由＝キャラ-スタッフ混入の防止。
+  // 脚本/キャラ原案モードも occ 空を救わない（声優と同じ理由＝キャラ-スタッフ混入の防止。
   // 脚本家・キャラ原案は AniList で職業がよく付いている＝取りこぼしは小さい）。
-  if (mode === 'creative') return isCreativeStaff(occ)
+  if (mode === 'writing') return isWritingStaff(occ)
+  if (mode === 'chardesign') return isChardesignStaff(occ)
   if (occ.length === 0) return true
   if (mode === 'director') return isDirectorPerson(occ)
   return isAuthorPerson(occ) // creator
@@ -897,7 +900,7 @@ interface RecentItem {
   type?: string
 }
 // 「最近見た」はモードごとに別リスト（#1: 作者/作品/監督/声優/制作会社）。searchMode と同じキー。
-type RecentKind = 'creator' | 'title' | 'director' | 'voice' | 'creative' | 'studio'
+type RecentKind = 'creator' | 'title' | 'director' | 'voice' | 'writing' | 'chardesign' | 'studio'
 
 interface WorkEdge {
   staffRole: string
@@ -925,15 +928,17 @@ interface WorkEdge {
 const searchQuery = ref('')
 // 検索モード: 作者 / 作品名(逆引き) / 監督 / 声優 / 制作会社。creator・director・voice は同じ
 // staff(search) を叩き、候補を職業で出し分ける（AniList に役割別検索が無い）。
-type SearchMode = 'creator' | 'title' | 'director' | 'voice' | 'creative' | 'studio'
+type SearchMode = 'creator' | 'title' | 'director' | 'voice' | 'writing' | 'chardesign' | 'studio'
 const searchMode = ref<SearchMode>('creator')
 // 検索タブ。広い画面は横並びタブ、狭い画面は独自メニュー（mode-menu）に切替。
+// 「脚本・原案」は脚本家とキャラ原案で役割が別物なので2タブに分割（ユーザー判断 2026-06-15(c)）。
 const SEARCH_TABS: { mode: SearchMode; label: string }[] = [
   { mode: 'creator', label: '作者' },
   { mode: 'title', label: '作品名' },
   { mode: 'director', label: '監督' },
   { mode: 'voice', label: '声優' },
-  { mode: 'creative', label: '脚本・原案' },
+  { mode: 'writing', label: '脚本' },
+  { mode: 'chardesign', label: 'キャラ原案' },
   { mode: 'studio', label: '制作会社' },
 ]
 const staffCandidates = ref<StaffCandidate[]>([])
@@ -947,7 +952,7 @@ const selectedStaff = ref<StaffCandidate | null>(null)
 // 制作会社モードで選択中のスタジオ（works-section を出すもう一つのトリガ）
 const selectedStudio = ref<StudioCandidate | null>(null)
 // 最近見た（モード別・most-recent-first・id でユニーク・各上限8）。
-const recentByKind = ref<Record<RecentKind, RecentItem[]>>({ creator: [], title: [], director: [], voice: [], creative: [], studio: [] })
+const recentByKind = ref<Record<RecentKind, RecentItem[]>>({ creator: [], title: [], director: [], voice: [], writing: [], chardesign: [], studio: [] })
 const filteredWorks = ref<WorkEdge[]>([])
 // 選択中の作り手の作品が「作者作品」か「監督作品」か（見出しの出し分け＝検索タブと独立。
 // 作品名チューザから監督を選んだ場合も正しく「監督作品」見出しになる）。
@@ -1077,13 +1082,15 @@ const CREATOR_PLACEHOLDER = '作者名（漢字・かな・ローマ字）　例
 const TITLE_PLACEHOLDER = '作品名（漫画・アニメ）　例: 進撃の巨人 / すずみや'
 const DIRECTOR_PLACEHOLDER = '監督名（漢字・かな・ローマ字）　例: 新海誠 / 山田尚子'
 const VOICE_PLACEHOLDER = '声優名（漢字・かな・ローマ字）　例: 花澤香菜 / はなざわ / hanazawa'
-const CREATIVE_PLACEHOLDER = '脚本家・キャラクター原案など　例: 岡田麿里 / 虚淵玄 / 貞本義行'
+const WRITING_PLACEHOLDER = '脚本家・シリーズ構成　例: 岡田麿里 / 虚淵玄 / 吉田玲子'
+const CHARDESIGN_PLACEHOLDER = 'キャラクター原案　例: 貞本義行 / 田中将賀 / いとうのいぢ'
 const STUDIO_PLACEHOLDER = '制作会社（アニメスタジオ）　例: MAPPA / ufotable / 京都アニメーション'
 const searchPlaceholder = computed(() =>
   searchMode.value === 'title' ? TITLE_PLACEHOLDER
     : searchMode.value === 'director' ? DIRECTOR_PLACEHOLDER
     : searchMode.value === 'voice' ? VOICE_PLACEHOLDER
-    : searchMode.value === 'creative' ? CREATIVE_PLACEHOLDER
+    : searchMode.value === 'writing' ? WRITING_PLACEHOLDER
+    : searchMode.value === 'chardesign' ? CHARDESIGN_PLACEHOLDER
     : searchMode.value === 'studio' ? STUDIO_PLACEHOLDER
     : CREATOR_PLACEHOLDER
 )
@@ -1094,7 +1101,8 @@ const RECENT_LABELS: Record<RecentKind, string> = {
   title: '最近見た作品',
   director: '最近見た監督',
   voice: '最近見た声優',
-  creative: '最近見た脚本・原案',
+  writing: '最近見た脚本家',
+  chardesign: '最近見たキャラ原案',
   studio: '最近見た制作会社',
 }
 // 現在モードの recent リストとラベル（searchMode は RecentKind と同じ集合）。
@@ -1285,7 +1293,8 @@ const RECENT_KEYS: Record<RecentKind, string> = {
   title: 'cd_recent_title',
   director: 'cd_recent_director',
   voice: 'cd_recent_voice',
-  creative: 'cd_recent_creative',
+  writing: 'cd_recent_writing',
+  chardesign: 'cd_recent_chardesign',
   studio: 'cd_recent_studio',
 }
 const RECENT_CAP = 8
@@ -1315,7 +1324,8 @@ function loadAllRecent() {
     title: loadRecentKind('title'),
     director: loadRecentKind('director'),
     voice: loadRecentKind('voice'),
-    creative: loadRecentKind('creative'),
+    writing: loadRecentKind('writing'),
+    chardesign: loadRecentKind('chardesign'),
     studio: loadRecentKind('studio'),
   }
   if (!import.meta.client || typeof window === 'undefined') return
@@ -1517,13 +1527,16 @@ function restoreFromQuery() {
   // 既に同じビューを表示中なら何もしない（自分の push・戻る/進むの二重ロード防止）
   const curId = selectedStudio.value?.id ?? selectedStaff.value?.id ?? null
   if (curId === id && currentViewKind() === view) return
-  // タブのハイライトを URL に合わせる（検索欄/作品ロードは各 select* が処理）
+  // タブのハイライトを URL に合わせる（検索欄/作品ロードは各 select* が処理）。
+  // 旧 ?view=creative（脚本・原案の統合ビュー＝既存の共有リンク）は「脚本」タブに寄せる
+  // （作品は selectStaffRoleById(id,'creative') が従来どおり統合表示する＝リンクは壊れない）。
   searchMode.value =
     view === 'studio' ? 'studio'
       : view === 'director' ? 'director'
         : view === 'voice' ? 'voice'
           : view === 'creator' ? 'creator'
-            : 'creative' // writing / chardesign / creative はタブ「脚本・原案」に寄せる
+            : view === 'chardesign' ? 'chardesign'
+              : 'writing' // writing / creative(legacy) は「脚本」タブ
   if (view === 'studio') selectStudioById(id)
   else if (view === 'director') selectDirectorById(id, '')
   else if (view === 'voice') selectVoiceById(id, '')
@@ -2515,11 +2528,18 @@ async function selectStaff(staff: StaffCandidate) {
     await loadVoiceWorks(staff.id, mySeq)
     return
   }
-  // 脚本・原案モード: その人物のアニメ参加作（脚本/構成・キャラ原案）を統合表示。
-  if (searchMode.value === 'creative') {
-    saveRecent('creative', staff.id, name)
-    $posthog?.capture('creator_viewed', { staff_id: staff.id, staff_name: name, source: 'creative_search' })
-    await loadStaffRoleWorks(staff.id, mySeq, 'creative')
+  // 脚本モード: その人物のアニメ参加作（脚本・シリーズ構成）を表示。
+  if (searchMode.value === 'writing') {
+    saveRecent('writing', staff.id, name)
+    $posthog?.capture('creator_viewed', { staff_id: staff.id, staff_name: name, source: 'writing_search' })
+    await loadStaffRoleWorks(staff.id, mySeq, 'writing')
+    return
+  }
+  // キャラ原案モード: その人物のアニメ参加作（キャラクター原案）を表示。
+  if (searchMode.value === 'chardesign') {
+    saveRecent('chardesign', staff.id, name)
+    $posthog?.capture('creator_viewed', { staff_id: staff.id, staff_name: name, source: 'chardesign_search' })
+    await loadStaffRoleWorks(staff.id, mySeq, 'chardesign')
     return
   }
   // 作者モード。URL（?view=creator&id=…）は loadWorks 内の pushView が載せる。
@@ -2775,10 +2795,16 @@ async function selectRecent(r: RecentItem) {
     await selectVoiceById(r.id, r.name)
     return
   }
-  if (mode === 'creative') {
-    saveRecent('creative', r.id, r.name)
+  if (mode === 'writing') {
+    saveRecent('writing', r.id, r.name)
     $posthog?.capture('creator_viewed', { staff_id: r.id, staff_name: r.name, source: 'recent' })
-    await selectStaffRoleById(r.id, r.name, 'creative')
+    await selectStaffRoleById(r.id, r.name, 'writing')
+    return
+  }
+  if (mode === 'chardesign') {
+    saveRecent('chardesign', r.id, r.name)
+    $posthog?.capture('creator_viewed', { staff_id: r.id, staff_name: r.name, source: 'recent' })
+    await selectStaffRoleById(r.id, r.name, 'chardesign')
     return
   }
   if (mode === 'title') {
