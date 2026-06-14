@@ -586,19 +586,59 @@ const SITE_DESC =
   '好きな作者・監督・声優・制作会社から、その作品をたどって「次に見る一本」を見つける discovery ツール。高評価順の並べ替え・絞り込み・おすすめ付き。データは AniList。'
 // OGP 画像は絶対 URL が望ましい。公開ドメインが分かれば SITE_URL で絶対化する。
 const OG_IMAGE = SITE_URL ? `${SITE_URL}/og-image.png` : '/og-image.png'
+// JSON-LD 構造化データ（WebSite + WebApplication）。prerender で静的 HTML に焼き込まれる
+// （useHead が .output/public/index.html に出力されることは実測済み）。検索エンジンが
+// 「無料で使える日本語の作品 discovery ツール」と理解できるようにする。innerHTML は静的文字列
+// のみ（ユーザー入力なし）＝XSS なし。値に < > & を含めない（Unhead のエスケープで壊れるため）。
+const JSON_LD = SITE_URL
+  ? JSON.stringify({
+      '@context': 'https://schema.org',
+      '@graph': [
+        {
+          '@type': 'WebSite',
+          '@id': `${SITE_URL}/#website`,
+          url: `${SITE_URL}/`,
+          name: 'Creator Discovery',
+          inLanguage: 'ja',
+          description: SITE_DESC
+        },
+        {
+          '@type': 'WebApplication',
+          '@id': `${SITE_URL}/#app`,
+          name: 'Creator Discovery',
+          url: `${SITE_URL}/`,
+          applicationCategory: 'EntertainmentApplication',
+          operatingSystem: 'Web',
+          browserRequirements: 'Requires JavaScript',
+          inLanguage: 'ja',
+          isAccessibleForFree: true,
+          description: SITE_DESC,
+          offers: { '@type': 'Offer', price: '0', priceCurrency: 'JPY' }
+        }
+      ]
+    })
+  : ''
 useHead({
   title: SITE_TITLE,
+  link: [
+    ...(SITE_URL ? [{ rel: 'canonical', href: `${SITE_URL}/` }] : [])
+  ],
   meta: [
     { name: 'description', content: SITE_DESC },
     { property: 'og:title', content: SITE_TITLE },
     { property: 'og:description', content: SITE_DESC },
     { property: 'og:type', content: 'website' },
     { property: 'og:image', content: OG_IMAGE },
+    { property: 'og:site_name', content: 'Creator Discovery' },
+    { property: 'og:locale', content: 'ja_JP' },
     ...(SITE_URL ? [{ property: 'og:url', content: SITE_URL }] : []),
     { name: 'twitter:card', content: 'summary_large_image' },
     { name: 'twitter:title', content: SITE_TITLE },
     { name: 'twitter:description', content: SITE_DESC },
     { name: 'twitter:image', content: OG_IMAGE }
+  ],
+  script: [
+    ...(JSON_LD ? [{ type: 'application/ld+json', innerHTML: JSON_LD }] : [])
   ]
 })
 
