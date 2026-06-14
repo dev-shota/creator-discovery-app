@@ -1013,6 +1013,16 @@ a {
   display: inline-block;
 }
 
+/* キーボード操作時のフォーカスを可視化（WCAG 2.4.7 Focus Visible）。:focus-visible なので
+   マウスクリックでは出ず、Tab 移動時だけ枠が出る。appearance:none のボタン群は既定の枠が
+   消えるため明示する。search-input は独自の box-shadow リングを持つので対象外。 */
+a:focus-visible,
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--pink);
+  outline-offset: 2px;
+}
+
 .work-card {
   background: #fff;
   border: 1px solid var(--line);
