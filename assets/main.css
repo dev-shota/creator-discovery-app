@@ -258,13 +258,14 @@ a {
   .hero {
     flex-direction: column;
     align-items: stretch;
-    gap: 20px;
+    gap: 16px;
+    margin-bottom: 24px;
   }
+  /* 装飾イラストはモバイルでは隠す。縦積みだと検索バーと結果/候補の間に挟まり、
+     検索のたびに大きな画像をスクロールで越える羽目になる＝UX 悪化（#1）。
+     aria-hidden の純装飾なので情報損失はゼロ。 */
   .hero-visual {
-    order: 2;
-  }
-  .hero-img {
-    max-width: 340px;
+    display: none;
   }
 }
 

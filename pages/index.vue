@@ -611,6 +611,7 @@ function retryDelayMs(e: unknown, fallbackMs: number): number {
 const ANILIST_MIN_GAP_MS = 360    // リクエスト開始の最小間隔（ms）
 const ANILIST_MAX_CONCURRENT = 2  // 同時実行数（typeahead の複数表記が極端に遅くならない範囲）
 const ANILIST_MAX_RETRY = 3       // 429 の自動リトライ回数
+const RESPONSE_CACHE_CAP = 120                // セッション内キャッシュ上限（LRU・長時間閲覧のメモリ肥大防止）
 const responseCache = new Map<string, any>() // (query+vars) → 応答（再選択・戻る操作で使い回す）
 const inflight = new Map<string, Promise<any>>()
 let activeRequests = 0
@@ -651,7 +652,13 @@ async function anilist<T = any>(
 ): Promise<T> {
   const useCache = opts.cache !== false
   const key = cacheKey(query, variables)
-  if (useCache && responseCache.has(key)) return responseCache.get(key) as T
+  if (useCache && responseCache.has(key)) {
+    // LRU: ヒットしたエントリを最後尾（最新利用）へ移してから返す（Codex#6: 真の LRU 化）。
+    const cached = responseCache.get(key)
+    responseCache.delete(key)
+    responseCache.set(key, cached)
+    return cached as T
+  }
   const existing = inflight.get(key)
   if (existing) return existing as Promise<T>
 
@@ -661,9 +668,26 @@ async function anilist<T = any>(
       try {
         const data = await $fetch<T>(ANILIST, {
           method: 'POST',
-          body: { query, variables: variables ?? {} }
+          body: { query, variables: variables ?? {} },
+          // ストール対策: 応答が来ない接続を15秒で打ち切り、無限スピナーを防ぐ（クラスD）。
+          timeout: 15000
         })
-        if (useCache) responseCache.set(key, data)
+        // GraphQL は HTTP 200 でも本文に errors を載せる（フィールド単位の失敗）。
+        // data が null なら失敗として投げ（呼び出し側が「空」でなくエラー表示にする）、
+        // 部分エラー（data はあるが errors あり）は返すがキャッシュしない（誤データの固着防止＝クラスD）。
+        const body = data as any
+        const hasErrors = !!(body && Array.isArray(body.errors) && body.errors.length > 0)
+        if (hasErrors && body.data == null) {
+          throw new Error(`AniList GraphQL error: ${body.errors?.[0]?.message ?? 'unknown'}`)
+        }
+        if (useCache && !hasErrors) {
+          responseCache.set(key, data)
+          // LRU: 上限超過で最古（挿入順の先頭）を1件捨てる。
+          if (responseCache.size > RESPONSE_CACHE_CAP) {
+            const oldest = responseCache.keys().next().value
+            if (oldest !== undefined) responseCache.delete(oldest)
+          }
+        }
         return data
       } catch (e) {
         // 429 は全体クールダウン（Retry-After 尊重）を設定して自動再試行
@@ -845,7 +869,9 @@ const recentByKind = ref<Record<RecentKind, RecentItem[]>>({ creator: [], title:
 const filteredWorks = ref<WorkEdge[]>([])
 // 選択中の作り手の作品が「作者作品」か「監督作品」か（見出しの出し分け＝検索タブと独立。
 // 作品名チューザから監督を選んだ場合も正しく「監督作品」見出しになる）。
-const selectedStaffKind = ref<'author' | 'director' | 'voice'>('author')
+const selectedStaffKind = ref<'author' | 'director' | 'voice' | 'staffrole'>('author')
+// staffrole（脚本・構成 / キャラ原案）モードのときの見出しラベル（'脚本・構成' 等）。
+const selectedRoleLabel = ref('')
 // 作品グリッドの並び順（#4）。score=高評価 / pop=人気 / new=新しい / old=古い / hidden=隠れた名作。
 // 既定は高評価順（最終目標「どれを次に見ればいいか」に最も効く）。新しい選択ごとに既定へ戻す。
 type SortMode = 'score' | 'pop' | 'new' | 'old' | 'hidden'
@@ -997,6 +1023,7 @@ const showRecent = computed(() =>
 const staffWorksSuffix = computed(() =>
   selectedStaffKind.value === 'director' ? ' の監督作品'
     : selectedStaffKind.value === 'voice' ? ' の出演作'
+    : selectedStaffKind.value === 'staffrole' ? ` の${selectedRoleLabel.value}作`
     : ' の作品'
 )
 
@@ -1452,22 +1479,24 @@ const TITLE_SEARCH_QUERY = `
 
 // 1 表記ぶんの検索。失敗しても [] を返してマージを止めない（キャッシュ/間隔は anilist() が担当）。
 // 429（レート上限）だけは握り潰さず呼び出し側へ伝える。
-async function fetchStaff(term: string): Promise<{ staff: StaffCandidate[]; rateLimited: boolean }> {
+async function fetchStaff(term: string): Promise<{ staff: StaffCandidate[]; rateLimited: boolean; errored: boolean }> {
   try {
     const data = await anilist<{ data: { Page: { staff: StaffCandidate[] } } }>(SEARCH_QUERY, { s: term })
-    return { staff: data.data.Page.staff ?? [], rateLimited: false }
+    return { staff: data?.data?.Page?.staff ?? [], rateLimited: false, errored: false }
   } catch (e) {
-    return { staff: [], rateLimited: isRateLimited(e) }
+    // 429 とハード失敗（GraphQL/ネットワーク）を区別＝呼び出し側が「見つからない」と
+    // 取り違えず、再試行を促せるように（Codex#5）。
+    return { staff: [], rateLimited: isRateLimited(e), errored: !isRateLimited(e) }
   }
 }
 
 // 1 表記ぶんの作品検索。失敗しても [] を返してマージを止めない。429 だけは伝える。
-async function fetchMedia(term: string): Promise<{ media: MediaCandidate[]; rateLimited: boolean }> {
+async function fetchMedia(term: string): Promise<{ media: MediaCandidate[]; rateLimited: boolean; errored: boolean }> {
   try {
     const data = await anilist<{ data: { Page: { media: MediaCandidate[] } } }>(TITLE_SEARCH_QUERY, { s: term })
-    return { media: data.data.Page.media ?? [], rateLimited: false }
+    return { media: data?.data?.Page?.media ?? [], rateLimited: false, errored: false }
   } catch (e) {
-    return { media: [], rateLimited: isRateLimited(e) }
+    return { media: [], rateLimited: isRateLimited(e), errored: !isRateLimited(e) }
   }
 }
 
@@ -1492,8 +1521,13 @@ async function executeSearch() {
   //  - ひら/カナ変換（カタカナ入力→ひらがな native。例 カキフライ→かきふらい）
   //  - ローマ字（漢字 native を読みで拾う。例 いのうえ→inoue→井上雄彦）
   const hasKana = /[぀-ヿ]/.test(q)
+  const hasKanji = /[一-鿿]/.test(q)
+  // 純かな（漢字なし）のときだけ romaji を足す。漢字混じりに toRomaji を当てると
+  // "進撃no巨人" のようなノイズ語になり1リクエストを無駄にする（title 検索と同じ判断・#4関連）。
   const terms = hasKana
-    ? [...new Set([q, toHiragana(q), toKatakana(q), toRomaji(q)])]
+    ? (hasKanji
+        ? [...new Set([q, toHiragana(q), toKatakana(q)])]
+        : [...new Set([q, toHiragana(q), toKatakana(q), toRomaji(q)])])
     : [q]
 
   searchError.value = ''
@@ -1507,6 +1541,9 @@ async function executeSearch() {
 
   // stale レスポンス対策: このリクエストの連番を記録
   const mySeq = ++requestSeq
+  // 新しい検索が始まったら、前の選択の作品/バッジ/おすすめロードも stale 化する
+  // （クラスC: 検索中に前の作者の studio バッジ/おすすめ/通知が後から降ってこないように）。
+  if (worksCtl) selectSeq++
 
   const batches = await Promise.all(terms.map(fetchStaff))
 
@@ -1516,6 +1553,7 @@ async function executeSearch() {
   activeIndex.value = -1
 
   const anyRateLimited = batches.some(b => b.rateLimited)
+  const anyErrored = batches.some(b => b.errored) // ハード失敗（Codex#5）
 
   // id で重複排除して統合
   const byId = new Map<number, StaffCandidate>()
@@ -1532,7 +1570,17 @@ async function executeSearch() {
     const fullName = ((c.name.native ?? '') + ' ' + (c.name.full ?? '')).toLowerCase()
     const isRelevant = queryForms.some(qf => {
       const toks = qf.split(/\s+/).filter(Boolean)
-      return toks.length > 0 && toks.every(tok => fullName.includes(tok))
+      if (toks.length === 0) return false
+      // 順方向: クエリの全トークンが候補名に部分一致（語順非依存・既存）。
+      if (toks.every(tok => fullName.includes(tok))) return true
+      // 逆方向（#5）: 候補のローマ字 full の各トークンがクエリ語に含まれる。フルネームを
+      // かなで打つと toRomaji が空白なし・姓名逆順（"kotobukiminako"）になるが、
+      // full="minako kotobuki" の minako/kotobuki が qf に含まれれば一致とみなす。
+      // 名トークン（2文字以上＝"Ai" のような短い名も拾う・Codex#3）。逆方向一致は多トークン名
+      // （姓＋名）だけに適用＝1語名がクエリの部分文字列にたまたま含まれる誤ヒットを防ぎつつ
+      // （レビュー#6）、短い名を含む二語名（例 Ai Yazawa / やざわあい）も救う。
+      const fullToks = (c.name.full ?? '').toLowerCase().split(/\s+/).filter(t => t.length >= 2)
+      return fullToks.length >= 2 && fullToks.every(ft => qf.includes(ft))
     })
 
     // 純・声優/ボーカルだけの人を除外（精密判定）。ただし声優モードでは当然残す。
@@ -1569,8 +1617,19 @@ async function executeSearch() {
   // ──────────────────────────────────────────────────────────────────────────
 
   if (staffCandidates.value.length === 0) {
-    // 全表記が 429 で空なら「見つからない」ではなくレート上限を案内する
-    searchError.value = anyRateLimited ? RATE_LIMIT_MSG : '候補が見つかりませんでした。'
+    if (anyRateLimited) {
+      // 全表記が 429 で空なら「見つからない」ではなくレート上限を案内する
+      searchError.value = RATE_LIMIT_MSG
+    } else if (anyErrored) {
+      // GraphQL/ネットワークのハード失敗を「見つからない」と取り違えない（Codex#5）。
+      searchError.value = '検索中にエラーが発生しました。少し待ってから再試行してください。'
+    } else if (hasKana && !hasKanji && q.length >= 4) {
+      // フルネームをかなで打つと AniList が引けないことがある（姓名連結のローマ字が当たらない）。
+      // 姓または名だけ／漢字を促す（#5: 「ことぶきみなこ」は0件でも「ことぶき」で出る）。
+      searchError.value = 'フルネームのかな検索は見つからないことがあります。姓または名だけ、または漢字で試してみてください。'
+    } else {
+      searchError.value = '候補が見つかりませんでした。'
+    }
   }
 
   // analytics: 検索イベント（作者モードの結果件数）
@@ -1602,6 +1661,7 @@ async function executeTitleSearch(q: string) {
 
   // stale レスポンス対策（作者検索と連番を共有）
   const mySeq = ++requestSeq
+  if (worksCtl) selectSeq++ // 前の選択の作品/おすすめロードも stale 化（クラスC）
   const batches = await Promise.all(terms.map(fetchMedia))
   if (mySeq !== requestSeq) return
   searchLoading.value = false
@@ -1615,9 +1675,11 @@ async function executeTitleSearch(q: string) {
   }
   mediaCandidates.value = [...byId.values()].sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0))
 
-  // 全表記が 429 で空ならレート上限を案内（0件は通常の「見つからない」表示に任せる）。
-  if (mediaCandidates.value.length === 0 && batches.some(b => b.rateLimited)) {
-    searchError.value = RATE_LIMIT_MSG
+  // 全表記が 429 で空ならレート上限を案内。ハード失敗（GraphQL/ネットワーク）は
+  // 「見つからない」と取り違えずエラーを出す（Codex#5）。通常の0件は下流の表示に任せる。
+  if (mediaCandidates.value.length === 0) {
+    if (batches.some(b => b.rateLimited)) searchError.value = RATE_LIMIT_MSG
+    else if (batches.some(b => b.errored)) searchError.value = '検索中にエラーが発生しました。少し待ってから再試行してください。'
   }
 
   // analytics: 検索イベント（作品名モードの結果件数）
@@ -1723,6 +1785,24 @@ async function executeStudioSearch(q: string) {
   // 進行中の検索を先に無効化（日本語ガードの早期 return より前に bump しないと、
   // 古い in-flight 検索が後から候補/ヒントを上書きする＝Codex#1）。
   const mySeq = ++requestSeq
+  const { term, viaAlias } = resolveStudioTerm(q)
+  // 別名にも当たらない日本語入力（漢字→人気順フィラー / かな→空）は AniList で検索できない。
+  // 検索を走らせず、現在の選択・候補・in-flight ロードに手を付けずに案内だけ出す
+  // （レビュー#1/#2: 検索が走らないのに選択を blank したり無駄に stale 化しない）。
+  const termHasJa = /[぀-ヿ一-鿿]/.test(term)
+  if (termHasJa && !viaAlias) {
+    dropdownOpen.value = true
+    searchLoading.value = false
+    searchError.value = ''
+    activeIndex.value = -1
+    studioCandidates.value = []
+    studioHint.value =
+      '制作会社は英語/ローマ字名で検索してください（例: 京都アニメーション → Kyoto Animation、ほか MAPPA / ufotable / Toei）。'
+    $posthog?.capture('search', { query: q, mode: searchMode.value, results: 0 })
+    return
+  }
+
+  // ここから実際に検索へ進む＝状態を初期化し、前の選択の in-flight ロードを stale 化する。
   dropdownOpen.value = true
   searchLoading.value = true
   searchError.value = ''
@@ -1734,20 +1814,7 @@ async function executeStudioSearch(q: string) {
   selectedStaff.value = null
   selectedStudio.value = null
   filteredWorks.value = []
-
-  const { term, viaAlias } = resolveStudioTerm(q)
-  // 別名にも当たらない日本語入力（漢字→人気順フィラー / かな→空）は検索せず案内する。
-  const termHasJa = /[぀-ヿ一-鿿]/.test(term)
-  if (termHasJa && !viaAlias) {
-    searchLoading.value = false
-    activeIndex.value = -1
-    studioCandidates.value = []
-    studioHint.value =
-      '制作会社は英語/ローマ字名で検索してください（例: 京都アニメーション → Kyoto Animation、ほか MAPPA / ufotable / Toei）。'
-    $posthog?.capture('search', { query: q, mode: searchMode.value, results: 0 })
-    return
-  }
-
+  if (worksCtl) selectSeq++
   try {
     const data = await anilist<{ data: { Page: { studios: StudioCandidate[] } } }>(STUDIO_SEARCH_QUERY, { s: term })
     if (mySeq !== requestSeq) return
@@ -1765,6 +1832,7 @@ async function executeStudioSearch(q: string) {
     activeIndex.value = -1
     studioCandidates.value = []
     if (isRateLimited(e)) searchError.value = RATE_LIMIT_MSG
+    else studioHint.value = '制作会社の検索中にエラーが発生しました。少し待ってから再試行してください。'
   }
 
   $posthog?.capture('search', { query: q, mode: searchMode.value, results: studioCandidates.value.length })
@@ -1962,7 +2030,14 @@ async function runWorksBatch(reset: boolean) {
       }
       if (ctl.seq !== selectSeq) return // stale（別の選択が来た）
       const page = ctl.pick(data)
-      if (!page) { worksHasMore.value = false; break }
+      if (!page) {
+        worksHasMore.value = false
+        // 先頭ページで対象（Staff/Studio）が null＝不正/古い id（共有リンク切れ等・クラスD）。
+        if (worksRaw.length === 0 && !worksError.value) {
+          worksError.value = '作品が見つかりませんでした。リンクが古いか、削除された可能性があります。'
+        }
+        break
+      }
       worksRaw.push(...page.items)
       worksCursor++
       pages++
@@ -1978,16 +2053,35 @@ async function runWorksBatch(reset: boolean) {
     worksLoading.value = false
     worksLoadingMore.value = false
     // 全ページ取得後に1回だけ後処理（例: studio バッジの一括解決）。
+    if (ctl.seq !== selectSeq) return // onBatch 直前に再確認（モード切替の隙間・resilience）
     if (ctl.onBatch) await ctl.onBatch(filteredWorks.value)
+    // onBatch の await 中に別の選択へ移っていたら、ここで止める。stale な recs/通知が
+    // 現在の選択のレーンを消すのを防ぐ（Codex#1）。
+    if (ctl.seq !== selectSeq) return
+    // cap（EAGER_PAGE_CAP）truncation の案内は onBatch（studio バッジ取得＝worksNotice を
+    // '' にしうる）の後に置く＝capされた一覧で案内が消えないように（Codex#4）。429 通知は上書きしない。
+    if (worksHasMore.value && !worksNotice.value) {
+      worksNotice.value = '件数が多いため一部のみ表示しています。「さらに読み込む」で続きを取得できます。'
+    }
     // 「次に見るなら」: 全件取得後、代表作のおすすめを読み込む（付加価値・失敗は無視）。
     void loadRecommendations(pickRecAnchor(), ctl.seq)
   } catch (e) {
-    if (!worksCtl || worksCtl.seq !== selectSeq) return
+    // 自分（この呼び出し）が現役の時だけエラーを表示する。global worksCtl.seq でなく
+    // local ctl.seq を見る＝stale な失敗が新しい選択の画面にエラーを書かない（レビュー#3）。
+    if (ctl.seq !== selectSeq) return
     worksError.value = isRateLimited(e)
       ? RATE_LIMIT_MSG
       : '作品の取得中にエラーが発生しました。少し待ってから再試行してください。'
     worksLoading.value = false
     worksLoadingMore.value = false
+  } finally {
+    // stale-return（別の選択が来た）で抜けた時も、この呼び出しが現役ならローディングを
+    // 必ず畳む（戻る/高速切替での無限スピナー防止・クラスC）。stale なら触らない
+    // ＝新しい選択が自前のスピナーを管理しているため。
+    if (ctl.seq === selectSeq) {
+      worksLoading.value = false
+      worksLoadingMore.value = false
+    }
   }
 }
 
@@ -2014,6 +2108,7 @@ function clearSelection() {
   worksCtl = null
   worksRaw = []
   worksHasMore.value = false
+  worksLoading.value = false       // 戻る操作で読み込み中に解除されても無限スピナーにしない（クラスC）
   worksLoadingMore.value = false
   worksLoadedCount.value = 0
 }
@@ -2110,6 +2205,40 @@ async function loadDirectorWorks(id: number, mySeq: number) {
         .filter(e => isDirectorRole(e.staffRole))
         .filter(e => { if (seen.has(e.node.id)) return false; seen.add(e.node.id); return true })
         .map(e => ({ staffRole: '監督', node: { ...e.node, relations: { edges: [] } } }))
+    },
+    seq: mySeq,
+  }
+  await runWorksBatch(true)
+}
+
+// staffrole モード（#2/#3）: シリーズ構成/脚本/キャラ原案 で選ばれた人物の、その役割の
+// アニメ作品を表示する。監督作と同じ ANIME credits を全ページ引き、役割ファミリで絞る＝
+// クリック元のアニメ（けいおん・リズと青い鳥 等）もちゃんと出る。スタジオバッジは付けない。
+async function loadStaffRoleWorks(id: number, mySeq: number, roleKey: 'writing' | 'chardesign') {
+  studioBadges.value = {}
+  expandedStudios.value = new Set()
+  selectedStaffKind.value = 'staffrole'
+  selectedRoleLabel.value = STAFF_ROLE_FAMILIES[roleKey].label
+  const re = STAFF_ROLE_FAMILIES[roleKey].match
+  const label = STAFF_ROLE_FAMILIES[roleKey].label
+  worksCtl = {
+    query: DIRECTOR_WORKS_QUERY,
+    vars: { id },
+    pick: (data) => {
+      const sm = data?.data?.Staff?.staffMedia
+      if (!sm) return null
+      if (selectedStaff.value?.id === id && data.data.Staff?.name) {
+        selectedStaff.value = { ...selectedStaff.value, name: data.data.Staff.name }
+      }
+      return { items: (sm.edges ?? []) as WorkEdge[], hasNextPage: !!sm.pageInfo?.hasNextPage }
+    },
+    // 役割ファミリ（脚本/構成 or キャラ原案）に一致する作品だけ＋ node id で重複排除。
+    transform: (raw: WorkEdge[]) => {
+      const seen = new Set<number>()
+      return raw
+        .filter(e => re.test(e.staffRole))
+        .filter(e => { if (seen.has(e.node.id)) return false; seen.add(e.node.id); return true })
+        .map(e => ({ staffRole: label, node: { ...e.node, relations: { edges: [] } } }))
     },
     seq: mySeq,
   }
@@ -2281,7 +2410,18 @@ interface AuthorChoice {
   name: { full: string; native: string | null }
   role: string
   label: string
-  kind: 'author' | 'director'
+  // author=原作系→漫画作品 / director=監督作品 / staffrole=アニメの役割別作品（脚本・構成 / キャラ原案）
+  kind: 'author' | 'director' | 'staffrole'
+  // staffrole のとき、その人物のアニメ credits から拾う役割ファミリ。
+  roleKey?: 'writing' | 'chardesign'
+}
+
+// staffrole（#2/#3）の役割ファミリ定義: 表示見出しと、アニメ credits から拾う staffRole 正規表現。
+// AniList の staffRole は話数注記が付く（例 "Script (eps 1, 2)" / "Series Composition Supervisor"）ので
+// 部分一致で拾う。Storyboard / Key Animation 等は意図的に含めない。
+const STAFF_ROLE_FAMILIES: Record<'writing' | 'chardesign', { label: string; match: RegExp }> = {
+  writing: { label: '脚本・構成', match: /Series Composition|Script|Screenplay/ },
+  chardesign: { label: 'キャラクター原案', match: /Character Design/ },
 }
 
 // AniList の英語ロールを日本語ラベルへ。AniList は role 文字列に前後の空白を含むことが
@@ -2324,10 +2464,10 @@ function collectAuthors(edges: MediaStaffEdge[], roleMatches: string[]): AuthorC
 function collectAnimeCreators(edges: MediaStaffEdge[]): AuthorChoice[] {
   const out: AuthorChoice[] = []
   const seen = new Set<number>()
-  const add = (e: MediaStaffEdge, kind: 'author' | 'director', label: string) => {
+  const add = (e: MediaStaffEdge, kind: AuthorChoice['kind'], label: string, roleKey?: AuthorChoice['roleKey']) => {
     if (seen.has(e.node.id)) return
     seen.add(e.node.id)
-    out.push({ id: e.node.id, name: e.node.name, role: (e.role ?? '').trim(), label, kind })
+    out.push({ id: e.node.id, name: e.node.name, role: (e.role ?? '').trim(), label, kind, roleKey })
   }
   // 1) 原作系（漫画/小説へ辿れる）
   for (const e of edges) {
@@ -2338,12 +2478,14 @@ function collectAnimeCreators(edges: MediaStaffEdge[]): AuthorChoice[] {
   for (const e of edges) {
     if (isDirectorRole((e.role ?? '').trim())) add(e, 'director', '監督')
   }
-  // 3) シリーズ構成 / 脚本 / キャラクター原案（その人の原作・漫画へ辿れることがある）
+  // 3) シリーズ構成 / 脚本 / キャラクター原案。これらは「アニメ側の創作者」なので、
+  //    その人物のアニメ credits を役割で絞ったビューへ送る（漫画作者ビューに入れると
+  //    クリック元のアニメ＝けいおん等が消える＝#2/#3 の根因だった）。
   for (const e of edges) {
     const r = (e.role ?? '').trim()
-    if (/Series Composition/.test(r)) add(e, 'author', 'シリーズ構成')
-    else if (/Script|Screenplay/.test(r)) add(e, 'author', '脚本')
-    else if (/Character Design/.test(r)) add(e, 'author', 'キャラクター原案')
+    if (/Series Composition/.test(r)) add(e, 'staffrole', 'シリーズ構成', 'writing')
+    else if (/Script|Screenplay/.test(r)) add(e, 'staffrole', '脚本', 'writing')
+    else if (/Character Design/.test(r)) add(e, 'staffrole', 'キャラクター原案', 'chardesign')
   }
   return out
 }
@@ -2410,6 +2552,12 @@ async function goToChoice(c: AuthorChoice) {
     await selectDirectorById(c.id, display)
     return
   }
+  if (c.kind === 'staffrole' && c.roleKey) {
+    const display = c.name.native || c.name.full
+    $posthog?.capture('creator_viewed', { staff_id: c.id, staff_name: display, source: 'title_to_staffrole' })
+    await selectStaffRoleById(c.id, display, c.roleKey)
+    return
+  }
   await goToAuthor(c.id, c.name)
 }
 
@@ -2438,6 +2586,16 @@ async function selectDirectorById(id: number, name: string) {
   const mySeq = ++selectSeq
   selectedStaff.value = { id, name: { full: name, native: name }, primaryOccupations: [], favourites: null, image: null }
   await loadDirectorWorks(id, mySeq)
+}
+
+// チューザから、staffrole（脚本・構成 / キャラ原案）作品を id で読み込む（#2/#3）。
+async function selectStaffRoleById(id: number, name: string, roleKey: 'writing' | 'chardesign') {
+  selectedStudio.value = null
+  mediaAuthorChoices.value = []
+  closeDropdown()
+  const mySeq = ++selectSeq
+  selectedStaff.value = { id, name: { full: name, native: name }, primaryOccupations: [], favourites: null, image: null }
+  await loadStaffRoleWorks(id, mySeq, roleKey)
 }
 
 // 「最近見た」チップ/行のクリック。現在モードに応じて読み込み先を切替える（#1）。
@@ -2532,13 +2690,20 @@ async function fetchStudiosByAnime(ids: number[]): Promise<Map<number, string[]>
   const out = new Map<number, string[]>()
   for (let i = 0; i < ids.length; i += 50) {
     const chunk = ids.slice(i, i + 50)
-    const data = await anilist<{
-      data: { Page: { media: { id: number; studios: { nodes: StudioNode[] } }[] } }
-    }>(STUDIO_QUERY, { ids: chunk })
-    for (const m of data.data.Page.media) {
-      const anim = m.studios.nodes.filter(n => n.isAnimationStudio).map(n => n.name)
-      // isMain は通常アニメ制作会社。フラグが付かない時だけ全 main にフォールバック
-      out.set(m.id, anim.length ? anim : m.studios.nodes.map(n => n.name))
+    try {
+      const data = await anilist<{
+        data: { Page: { media: { id: number; studios: { nodes: StudioNode[] } | null }[] } }
+      }>(STUDIO_QUERY, { ids: chunk })
+      for (const m of data?.data?.Page?.media ?? []) {
+        const nodes = m.studios?.nodes ?? []
+        const anim = nodes.filter(n => n.isAnimationStudio).map(n => n.name)
+        // isMain は通常アニメ制作会社。フラグが付かない時だけ全 main にフォールバック
+        out.set(m.id, anim.length ? anim : nodes.map(n => n.name))
+      }
+    } catch (e) {
+      // 429 は上位（loadStudioBadges）のリトライ／全体クールダウンに任せて伝播。
+      if (isRateLimited(e)) throw e
+      // それ以外の1チャンク失敗は握って次へ＝部分的にでもバッジを出す（クラスD・全消し防止）。
     }
   }
   return out
@@ -2650,6 +2815,9 @@ function pickRecAnchor(): WorkEdge | null {
 }
 
 async function loadRecommendations(anchor: WorkEdge | null, mySeq: number) {
+  // stale な呼び出し（onBatch await 中に選択が変わった）が現在の選択の recs を消さないよう、
+  // クリアより前に staleness を確認する（Codex#1）。
+  if (mySeq !== selectSeq) return
   recommendations.value = []
   recsAnchorTitle.value = ''
   if (!anchor) return
