@@ -18,7 +18,9 @@
   /* Ink / neutral */
   --ink: #2a2a33;
   --ink-soft: #4a4a56;
-  --mute: #7a7a86;
+  --mute: #70707d; /* 中立の二次テキスト色。#7a7a86 は白で 4.24:1 と AA(4.5) 未達だった＝
+                      識別性のため色相そのままで最小限暗くし 4.88:1(白)/4.72:1(#fbfbfd) へ。
+                      ブランドのティール/ピンクは identity なので別途ユーザー判断（status 参照）。 */
   --bg: #ffffff;
   --bg-soft: #fbfbfd;
   --line: #eaeaf0;
