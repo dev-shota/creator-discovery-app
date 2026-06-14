@@ -803,6 +803,20 @@ button.studio-badge {
   text-decoration: underline;
 }
 
+/* アフィリエイト有効時の「広告」ラベル（ステマ規制: 広告である旨を CTA に明示）。
+   タグ未設定（中立リンク）では v-if で非表示＝表示しない。 */
+.ad-badge {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--tint-pink);
+  color: var(--pink);
+  font-size: 10px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
 /* ── Status text ── */
 .status-empty {
   color: var(--mute);

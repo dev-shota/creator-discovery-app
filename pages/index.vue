@@ -293,7 +293,7 @@
               target="_blank"
               :rel="purchaseRel"
               class="work-card-buy"
-            >Amazon で探す</a>
+            ><span v-if="affiliateActive" class="ad-badge">広告</span>Amazon で探す</a>
           </div>
         </div>
       </div>
@@ -312,8 +312,9 @@
         カバー画像は AniList の画像を直接参照（hotlink）しています。
       </p>
       <p v-if="affiliateActive" class="footer-disclosure">
-        ※ 当サイトのリンクには Amazon アソシエイト等のアフィリエイトリンクが含まれます。
-        リンク経由で商品が購入された場合、当サイトが収益を得ることがあります。
+        <strong>広告（アフィリエイト）について:</strong>
+        当サイトは Amazon アソシエイト・プログラムの参加者です。「Amazonのアソシエイトとして、Creator Discovery は適格販売により収入を得ています。」
+        作品の購入リンクには広告（アフィリエイトリンク）が含まれ、リンク経由で購入された場合に当サイトが収益を得ることがあります。
       </p>
     </footer>
   </div>
