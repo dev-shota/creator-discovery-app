@@ -178,19 +178,159 @@ a {
   z-index: 1;
   max-width: 1000px;
   margin: 0 auto;
-  padding: 64px 24px 0;
+  padding: 22px 24px 0;
 }
 
-.site-header {
-  margin-bottom: 36px;
+/* ── Top bar / brand ── */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 40px;
 }
 
-.page-description {
-  color: var(--ink-soft);
-  font-size: 17px;
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+}
+
+.brand-mark {
+  display: inline-flex;
+  filter: drop-shadow(0 4px 10px rgba(237, 58, 140, 0.25));
+}
+
+.brand-name {
+  font-family: var(--font-round);
+  font-weight: 800;
+  font-size: 20px;
+  color: var(--ink);
+  letter-spacing: 0.01em;
+}
+
+/* ── Hero ── */
+.hero {
+  margin-bottom: 44px;
+}
+
+.hero-title {
+  font-family: var(--font-round);
+  font-size: 60px;
+  font-weight: 800;
+  line-height: 1.16;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+  margin-top: 2px;
+}
+
+.hero-title .ac-pink {
+  color: var(--pink);
+}
+.hero-title .ac-teal {
+  color: var(--teal);
+}
+
+.hero-sub {
+  font-size: 18px;
   line-height: 1.7;
-  max-width: 620px;
-  margin-top: 10px;
+  color: var(--ink-soft);
+  margin: 16px 0 28px;
+  max-width: 640px;
+}
+
+/* 手書き風アンダーライン（Caveat ではなく下線装飾） */
+.hand {
+  position: relative;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.hand::after {
+  content: "";
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  bottom: -3px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--yellow);
+  z-index: -1;
+}
+
+/* Search をヒーローの主役として少しゆったり */
+.search-hero {
+  max-width: 720px;
+}
+
+/* ── How it works（作り手→作品→スタジオ） ── */
+.how {
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+  margin: 0 0 8px;
+  flex-wrap: wrap;
+}
+
+.how-card {
+  flex: 1 1 0;
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-card);
+  padding: 20px 22px;
+}
+
+.how-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  margin-bottom: 4px;
+}
+.how-icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.c-creator .how-icon {
+  background: var(--tint-mint);
+  color: #1b8f89;
+}
+.c-work .how-icon {
+  background: var(--tint-pink);
+  color: var(--pink);
+}
+.c-studio .how-icon {
+  background: var(--tint-lav);
+  color: var(--purple-2);
+}
+
+.how-name {
+  font-family: var(--font-round);
+  font-weight: 800;
+  font-size: 18px;
+  color: var(--ink);
+}
+
+.how-desc {
+  font-size: 13px;
+  color: var(--mute);
+}
+
+.how-arrow {
+  align-self: center;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--pink);
+  flex: none;
 }
 
 /* ── Search row ── */
@@ -480,11 +620,16 @@ button.studio-badge {
 /* ── Responsive (mobile) ── */
 @media (max-width: 768px) {
   .page-container {
-    padding: 40px 18px 0;
+    padding: 18px 18px 0;
   }
 
-  h1 {
-    font-size: 38px;
+  .topbar {
+    margin-bottom: 28px;
+  }
+
+  .hero-title {
+    font-size: 36px;
+    line-height: 1.2;
   }
 
   h2 {
@@ -495,7 +640,7 @@ button.studio-badge {
     font-size: 28px;
   }
 
-  .page-description {
+  .hero-sub {
     font-size: 15px;
   }
 
@@ -507,6 +652,17 @@ button.studio-badge {
   .search-input,
   .search-btn {
     font-size: 16px; /* iOS のズーム発火（<16px）を防ぐ */
+  }
+
+  /* how strip: 縦積み＋矢印を下向きに */
+  .how {
+    flex-direction: column;
+  }
+  .how-card {
+    width: 100%;
+  }
+  .how-arrow {
+    transform: rotate(90deg);
   }
 
   /* 装飾シェイプはモバイルでは控えめに（崩れ・重さ防止） */

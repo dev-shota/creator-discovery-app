@@ -8,28 +8,47 @@
       <span class="blob b4"></span>
     </div>
 
-    <header class="site-header">
-      <span class="eyebrow">creator discovery</span>
-      <h1>作り手から、作品をたどる。</h1>
-      <p class="page-description">
-        好きな漫画家・原作者を検索して、その人の作品とアニメ化した制作会社をたどれる discovery ツールです。
-      </p>
+    <!-- Top bar: brand -->
+    <header class="topbar">
+      <a class="brand" href="/">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 64 64" width="32" height="32">
+            <rect width="64" height="64" rx="16" fill="#ed3a8c" />
+            <circle cx="50" cy="15" r="6" fill="#eff33c" />
+            <circle cx="28" cy="30" r="12" fill="none" stroke="#fff" stroke-width="5" />
+            <line x1="37" y1="39" x2="49" y2="51" stroke="#fff" stroke-width="6" stroke-linecap="round" />
+          </svg>
+        </span>
+        <span class="brand-name">Creator Discovery</span>
+      </a>
     </header>
 
-    <!-- Search Box -->
-    <div class="search-row">
-      <input
-        v-model="searchQuery"
-        type="text"
-        class="search-input"
-        placeholder="スタッフ名（漢字・かな・ローマ字）　例: 井上雄彦 / いのうえ / inoue"
-        @keyup.enter="searchStaff"
-      />
-      <button class="search-btn" @click="searchStaff">検索</button>
-    </div>
+    <!-- Hero（検索ファースト） -->
+    <section class="hero">
+      <span class="eyebrow">creator discovery</span>
+      <h1 class="hero-title">
+        作り手から、<span class="ac-pink">作品</span>、<br class="hero-br" />そして<span class="ac-teal">アニメ</span>へ。
+      </h1>
+      <p class="hero-sub">
+        <span class="hand">次の“好き”</span>を、好きな作者からたどって見つける discovery ツール。
+      </p>
 
-    <!-- Search Error -->
-    <p v-if="searchError" class="status-error">{{ searchError }}</p>
+      <!-- Search（ヒーローの主役アクション） -->
+      <div class="search-hero">
+        <div class="search-row">
+          <input
+            v-model="searchQuery"
+            type="text"
+            class="search-input"
+            placeholder="スタッフ名（漢字・かな・ローマ字）　例: 井上雄彦 / いのうえ / inoue"
+            @keyup.enter="searchStaff"
+          />
+          <button class="search-btn" @click="searchStaff">検索</button>
+        </div>
+
+        <!-- Search Error -->
+        <p v-if="searchError" class="status-error">{{ searchError }}</p>
+      </div>
 
     <!-- Staff Candidate List — max-height scroll so works section is always visible -->
     <ul v-if="staffCandidates.length > 0" class="candidate-list">
@@ -49,6 +68,34 @@
         </span>
       </li>
     </ul>
+    </section>
+
+    <!-- How it works（検索前のオンボーディング＝作り手→作品→スタジオ） -->
+    <section v-if="!selectedStaff" class="how" aria-label="使い方">
+      <div class="how-card c-creator">
+        <span class="how-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4L16 5l3 3L8 19l-4 1z" /><path d="M14 7l3 3" /></svg>
+        </span>
+        <span class="how-name">Creator</span>
+        <span class="how-desc">漫画家・原作者</span>
+      </div>
+      <span class="how-arrow" aria-hidden="true">→</span>
+      <div class="how-card c-work">
+        <span class="how-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5c2.5-1 5-1 8 .5C15 4 17.5 4 20 5v13c-2.5-1-5-1-8 .5C9 17 6.5 17 4 18V5z" /><path d="M12 5.5V18.5" /></svg>
+        </span>
+        <span class="how-name">Work</span>
+        <span class="how-desc">作品（漫画・原作）</span>
+      </div>
+      <span class="how-arrow" aria-hidden="true">→</span>
+      <div class="how-card c-studio">
+        <span class="how-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="18" height="11" rx="2" /><path d="M3 9l3-4 3.5 0-3 4M9.5 9l3-4 3.5 0-3 4" /></svg>
+        </span>
+        <span class="how-name">Studio</span>
+        <span class="how-desc">アニメ化スタジオ</span>
+      </div>
+    </section>
 
     <!-- Works Section — directly after candidate list -->
     <div v-if="selectedStaff" class="works-section">
