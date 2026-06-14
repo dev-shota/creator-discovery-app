@@ -41,9 +41,10 @@ export default defineNuxtConfig({
     public: {
       // AniList GraphQL エンドポイント（R1: 直書き定数を廃しここへ寄せた）
       anilistEndpoint: 'https://graphql.anilist.co',
-      // 公開ドメイン。設定すると OGP 画像を絶対 URL にする（共有カード互換性）。
-      // 例: NUXT_PUBLIC_SITE_URL=https://creator-discovery.pages.dev
-      siteUrl: '',
+      // 公開ドメイン。OGP 画像/URL を絶対化する（X 等の共有カードは相対 URL の画像を出さない）。
+      // 既定を本番 URL に固定し、env 未設定でもカード画像が出るようにする。独自ドメイン化したら
+      // NUXT_PUBLIC_SITE_URL で上書き。
+      siteUrl: 'https://creator-discovery-app.devshota-works.workers.dev',
       // アフィリエイトの構造的シーム（R4）。空＝中立（タグ無し・コミッション無し）。
       // 有効化は RED（外向き・不可逆）: Amazon アソシエイト承認後に
       // NUXT_PUBLIC_AFFILIATE_TAG=yourtag-22 を generate 環境に設定するだけ。
