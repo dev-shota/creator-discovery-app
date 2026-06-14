@@ -2,6 +2,11 @@ export default defineNuxtConfig({
   compatibilityDate: '2026-06-14',
   telemetry: false,
   devtools: { enabled: false },
+  // このアプリは client-side で AniList を叩く純静的サイト。Cloudflare のビルド環境は
+  // 放っておくと Nitro が cloudflare-module（サーバ Worker）プリセットを自動選択し、
+  // `nuxt generate`（prerender）と食い違って index.mjs 不在で deploy が落ちる。
+  // ここで static を固定し、ローカル＝本番ともに `.output/public` の純静的出力に統一する。
+  nitro: { preset: 'static' },
   typescript: {
     shim: false
   },
