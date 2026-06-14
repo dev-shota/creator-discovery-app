@@ -31,7 +31,7 @@
           作り手から、<span class="ac-pink">作品</span>、<br class="hero-br" />そして<span class="ac-teal">アニメ</span>へ。
         </h1>
         <p class="hero-sub">
-          <span class="hand">次の“好き”</span>を、好きな作者からたどって見つける discovery ツール。
+          <span class="hand">次に見る一本</span>を、好きな作者・監督・声優・制作会社からたどって見つける。
         </p>
 
         <!-- Search（ヒーローの主役アクション・候補は入力直下にドロップダウン） -->
@@ -49,15 +49,30 @@
               @click="setSearchMode(t.mode)"
             >{{ t.label }}</button>
           </div>
-          <!-- 横に収まらない狭い画面ではプルダウンに切替（CSS の media query で出し分け） -->
-          <select
-            class="search-mode-select"
-            aria-label="検索モード"
-            :value="searchMode"
-            @change="setSearchMode(($event.target as HTMLSelectElement).value as SearchMode)"
-          >
-            <option v-for="t in SEARCH_TABS" :key="t.mode" :value="t.mode">{{ t.label }}</option>
-          </select>
+          <!-- 狭い画面: ネイティブの select ポップアップでなく独自メニュー（ハンバーガー式・
+               タップで開閉・選択で自動クローズ）。CSS の media query でタブと出し分ける。 -->
+          <div class="mode-menu">
+            <button
+              type="button"
+              class="mode-menu-trigger"
+              aria-label="検索モードを選ぶ"
+              :aria-expanded="modeMenuOpen"
+              @click.stop="modeMenuOpen = !modeMenuOpen"
+            >
+              <span class="mode-menu-icon" aria-hidden="true"><span></span><span></span><span></span></span>
+              <span class="mode-menu-current">{{ currentModeLabel }}</span>
+            </button>
+            <ul v-if="modeMenuOpen" class="mode-menu-list" role="menu">
+              <li
+                v-for="t in SEARCH_TABS"
+                :key="t.mode"
+                role="menuitem"
+                class="mode-menu-item"
+                :class="{ 'is-active': searchMode === t.mode }"
+                @click="onPickMode(t.mode)"
+              >{{ t.label }}</li>
+            </ul>
+          </div>
 
           <div class="search-box">
             <div class="search-row">
@@ -262,36 +277,36 @@
         <span class="how-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4L16 5l3 3L8 19l-4 1z" /><path d="M14 7l3 3" /></svg>
         </span>
-        <span class="how-name">Creator</span>
-        <span class="how-desc">漫画家・原作者</span>
+        <span class="how-name">作り手</span>
+        <span class="how-desc">作者・監督・声優</span>
       </div>
       <span class="how-arrow" aria-hidden="true">→</span>
       <div class="how-card c-work">
         <span class="how-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5c2.5-1 5-1 8 .5C15 4 17.5 4 20 5v13c-2.5-1-5-1-8 .5C9 17 6.5 17 4 18V5z" /><path d="M12 5.5V18.5" /></svg>
         </span>
-        <span class="how-name">Work</span>
-        <span class="how-desc">作品（漫画・原作）</span>
+        <span class="how-name">作品</span>
+        <span class="how-desc">漫画・アニメを一覧</span>
       </div>
       <span class="how-arrow" aria-hidden="true">→</span>
       <div class="how-card c-studio">
         <span class="how-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="18" height="11" rx="2" /><path d="M3 9l3-4 3.5 0-3 4M9.5 9l3-4 3.5 0-3 4" /></svg>
         </span>
-        <span class="how-name">Studio</span>
-        <span class="how-desc">アニメ化スタジオ</span>
+        <span class="how-name">次の一本</span>
+        <span class="how-desc">評価・おすすめで発見</span>
       </div>
     </section>
 
-    <!-- Works Section -->
-    <div v-if="selectedStaff" class="works-section">
+    <!-- ═══ Works Section（作者/監督/声優/制作会社 共通）═══ -->
+    <div v-if="selectedStaff || selectedStudio" class="works-section">
       <div class="works-head">
         <h2>
-          {{ selectedStaff.name.native || selectedStaff.name.full }}{{ staffWorksSuffix }}
-          <span v-if="worksLoading" class="works-loading-indicator">読み込み中...</span>
+          {{ worksHeading }}
+          <span v-if="worksLoading" class="works-loading-indicator">{{ worksLoadedCount > 0 ? `読み込み中… ${worksLoadedCount}件` : '読み込み中…' }}</span>
         </h2>
         <button
-          v-if="!worksLoading && filteredWorks.length > 0"
+          v-if="selectedStaff && !worksLoading && filteredWorks.length > 0"
           type="button"
           class="share-btn"
           @click="shareOnX"
@@ -301,49 +316,156 @@
       <p v-if="worksError" class="status-error">{{ worksError }}</p>
       <p v-if="worksNotice" class="status-notice">{{ worksNotice }}</p>
 
-      <!-- 並び順トグル（初期=古い順）＋件数。作品が2件以上のときだけ出す。 -->
+      <!-- 迷ったら（代表作への誘導＝最終目標「次に何を見るか」の即答） -->
+      <button
+        v-if="repWork && displayWorks.length > 1"
+        type="button"
+        class="pick-nudge"
+        @click="scrollToWork(repWork.node.id)"
+      >
+        <span class="pick-nudge-label">迷ったら、まず</span>
+        <span class="pick-nudge-title">{{ displayTitle(repWork.node.title) }}</span>
+        <span v-if="repWork.node.averageScore != null" class="pick-nudge-score">★{{ repWork.node.averageScore }}</span>
+      </button>
+
+      <!-- コントロール: 並び順（#4）＋絞り込み＋件数 -->
       <div v-if="filteredWorks.length > 1" class="works-controls">
         <div class="sort-toggle" role="group" aria-label="並び順">
-          <button type="button" class="sort-btn" :class="{ 'is-active': worksSort === 'old' }" @click="worksSort = 'old'">古い順</button>
-          <button type="button" class="sort-btn" :class="{ 'is-active': worksSort === 'new' }" @click="worksSort = 'new'">新しい順</button>
+          <button
+            v-for="s in SORT_TABS"
+            :key="s.mode"
+            type="button"
+            class="sort-btn"
+            :class="{ 'is-active': worksSort === s.mode }"
+            @click="worksSort = s.mode"
+          >{{ s.label }}</button>
         </div>
-        <span class="works-count">{{ filteredWorks.length }}件{{ worksHasMore ? '＋' : '' }}</span>
+        <div class="works-controls-right">
+          <button
+            type="button"
+            class="filter-btn"
+            :class="{ 'is-active': activeFilterCount > 0 || filterPanelOpen }"
+            :aria-expanded="filterPanelOpen"
+            @click="toggleFilterPanel"
+          >絞り込み<span v-if="activeFilterCount > 0" class="filter-count">{{ activeFilterCount }}</span></button>
+          <span class="works-count">{{ displayWorks.length }}<span v-if="displayWorks.length !== filteredWorks.length">/{{ filteredWorks.length }}</span>件{{ worksHasMore ? '＋' : '' }}</span>
+        </div>
       </div>
 
-      <div v-if="filteredWorks.length > 0" class="works-grid">
+      <!-- 絞り込みパネル（デスクトップ=インライン展開 / モバイル=下からドロワー＝ネイティブ
+           ポップアップでない・バックドロップ/完了で閉じる・ジャンルは複数選択） -->
+      <template v-if="filterPanelOpen">
+        <div class="filter-backdrop" @click="filterPanelOpen = false"></div>
+        <div class="filter-panel" role="dialog" aria-label="絞り込み">
+          <div class="filter-panel-head">
+            <span class="filter-panel-title">絞り込み</span>
+            <button type="button" class="filter-clear" @click="clearFilters">条件をクリア</button>
+            <button type="button" class="filter-done" @click="filterPanelOpen = false">完了</button>
+          </div>
+
+          <div v-if="roleOptions.length > 1" class="filter-group">
+            <span class="filter-group-label">関わり方</span>
+            <div class="filter-chips">
+              <button type="button" class="filter-chip" :class="{ 'is-on': filterRole === '' }" @click="filterRole = ''">すべて</button>
+              <button v-for="r in roleOptions" :key="r" type="button" class="filter-chip" :class="{ 'is-on': filterRole === r }" @click="filterRole = filterRole === r ? '' : r">{{ workRoleJp(r) }}</button>
+            </div>
+          </div>
+
+          <div class="filter-group">
+            <span class="filter-group-label">評価</span>
+            <div class="filter-chips">
+              <button v-for="n in [0, 60, 70, 80, 85]" :key="n" type="button" class="filter-chip" :class="{ 'is-on': filterMinScore === n }" @click="filterMinScore = n">{{ n === 0 ? '指定なし' : `★${n}以上` }}</button>
+            </div>
+          </div>
+
+          <div v-if="genreOptions.length > 0" class="filter-group">
+            <span class="filter-group-label">ジャンル<span class="filter-group-hint">（複数可）</span></span>
+            <div class="filter-chips">
+              <button v-for="g in genreOptions" :key="g" type="button" class="filter-chip" :class="{ 'is-on': filterGenres.has(g) }" @click="toggleGenre(g)">{{ genreJp(g) }}</button>
+            </div>
+          </div>
+
+          <div v-if="formatOptions.length > 1" class="filter-group">
+            <span class="filter-group-label">形態</span>
+            <div class="filter-chips">
+              <button type="button" class="filter-chip" :class="{ 'is-on': filterFormat === '' }" @click="filterFormat = ''">すべて</button>
+              <button v-for="f in formatOptions" :key="f" type="button" class="filter-chip" :class="{ 'is-on': filterFormat === f }" @click="filterFormat = filterFormat === f ? '' : f">{{ formatJp(f) }}</button>
+            </div>
+          </div>
+
+          <div v-if="statusOptions.length > 1" class="filter-group">
+            <span class="filter-group-label">状態</span>
+            <div class="filter-chips">
+              <button type="button" class="filter-chip" :class="{ 'is-on': filterStatus === '' }" @click="filterStatus = ''">すべて</button>
+              <button v-for="s in statusOptions" :key="s" type="button" class="filter-chip" :class="{ 'is-on': filterStatus === s }" @click="filterStatus = filterStatus === s ? '' : s">{{ statusJp(s) }}</button>
+            </div>
+          </div>
+
+          <div class="filter-group">
+            <span class="filter-group-label">既見</span>
+            <div class="filter-chips">
+              <button type="button" class="filter-chip" :class="{ 'is-on': filterUnseenOnly }" @click="filterUnseenOnly = !filterUnseenOnly">未見のみ表示</button>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- グリッド（フィルタ→ソート済み＝displayWorks） -->
+      <div v-if="displayWorks.length > 0" class="works-grid">
         <div
-          v-for="edge in sortedWorks"
+          v-for="edge in displayWorks"
+          :id="`work-${edge.node.id}`"
           :key="edge.node.siteUrl"
           class="work-card"
+          :class="{ 'is-seen': seenIds.has(edge.node.id), 'is-rep': repWork && edge.node.id === repWork.node.id }"
         >
-          <a :href="edge.node.siteUrl" target="_blank" rel="noopener">
-            <img
-              v-if="edge.node.coverImage?.medium"
-              :src="edge.node.coverImage.medium"
-              :alt="displayTitle(edge.node.title)"
-              class="work-card-cover"
-            />
-          </a>
-          <div class="work-card-body">
-            <a
-              :href="edge.node.siteUrl"
-              target="_blank"
-              rel="noopener"
-              class="work-card-title"
-            >
-              {{ displayTitle(edge.node.title) }}
+          <div class="work-card-coverwrap">
+            <a :href="edge.node.siteUrl" target="_blank" rel="noopener">
+              <img
+                v-if="edge.node.coverImage?.medium"
+                :src="edge.node.coverImage.medium"
+                :alt="displayTitle(edge.node.title)"
+                class="work-card-cover"
+                loading="lazy"
+              />
+              <span v-else class="work-card-cover work-card-cover-fallback" aria-hidden="true">?</span>
             </a>
-            <div class="work-card-year">
-              {{ edge.node.startDate?.year ?? '年不明' }}
+            <span v-if="repWork && edge.node.id === repWork.node.id" class="ribbon ribbon-rep">代表作</span>
+            <span v-else-if="hiddenGemIds.has(edge.node.id)" class="ribbon ribbon-hidden">隠れた名作</span>
+            <button
+              type="button"
+              class="seen-toggle"
+              :class="{ 'is-seen': seenIds.has(edge.node.id) }"
+              :title="seenIds.has(edge.node.id) ? '見た（クリックで解除）' : '見た/読んだにする'"
+              @click="toggleSeen(edge.node.id)"
+            >{{ seenIds.has(edge.node.id) ? '✓ 見た' : '見た' }}</button>
+          </div>
+          <div class="work-card-body">
+            <a :href="edge.node.siteUrl" target="_blank" rel="noopener" class="work-card-title">{{ displayTitle(edge.node.title) }}</a>
+
+            <!-- シグナル・チップ（★評価・形態/話数・年）＝一目で「見る価値」を判断 -->
+            <div class="work-card-chips">
+              <span v-if="edge.node.averageScore != null" class="chip chip-score">★{{ edge.node.averageScore }}</span>
+              <span v-if="formatChip(edge.node)" class="chip chip-format">{{ formatChip(edge.node) }}</span>
+              <span class="chip chip-year">{{ edge.node.startDate?.year ?? '年不明' }}</span>
             </div>
-            <div class="work-card-role">{{ edge.staffRole }}</div>
+
+            <div v-if="edge.node.genres.length" class="work-card-genres">
+              <span v-for="g in edge.node.genres.slice(0, 2)" :key="g" class="genre-tag">{{ genreJp(g) }}</span>
+            </div>
+
+            <div v-if="edge.staffRole" class="work-card-role">{{ workRoleJp(edge.staffRole) }}</div>
+
+            <!-- 声優: 演じたキャラ -->
+            <div v-if="edge.characters && edge.characters.length" class="work-card-chars">
+              <span class="work-card-chars-label">役</span>
+              <span v-for="c in edge.characters.slice(0, 3)" :key="c.id" class="char-tag">{{ c.name }}</span>
+            </div>
+
+            <!-- アニメ化スタジオ（作者モード） -->
             <div v-if="studioBadges[edge.node.id]?.length" class="work-card-studios">
               <span class="work-card-studios-label">アニメ化</span>
-              <span
-                v-for="name in visibleStudios(edge.node.id)"
-                :key="name"
-                class="studio-badge"
-              >{{ name }}</span>
+              <span v-for="name in visibleStudios(edge.node.id)" :key="name" class="studio-badge">{{ name }}</span>
               <button
                 v-if="studioBadges[edge.node.id].length > 2"
                 type="button"
@@ -351,8 +473,7 @@
                 @click="toggleStudios(edge.node.id)"
               >{{ expandedStudios.has(edge.node.id) ? '閉じる' : '+' + (studioBadges[edge.node.id].length - 2) }}</button>
             </div>
-            <!-- 購入導線（R4 シーム）。中立リンク（タグ無し）。affiliateTag を
-                 設定するとアフィリエイト化＋下部に開示文が出る。 -->
+
             <a
               :href="purchaseLink(edge.node.title)"
               target="_blank"
@@ -363,82 +484,46 @@
         </div>
       </div>
 
+      <!-- 空表示: フィルタで全部隠れた場合と、そもそも0件を区別する -->
+      <p v-else-if="!worksLoading && !worksError && filteredWorks.length > 0" class="status-empty">
+        絞り込み条件に合う作品がありません。
+        <button type="button" class="inline-link" @click="clearFilters">条件をクリア</button>
+      </p>
       <p v-else-if="!worksLoading && !worksError" class="status-empty">
-        表示対象の作品が見つかりませんでした（staffRole フィルタ適用済み）。
+        表示できる作品が見つかりませんでした。
       </p>
 
-      <!-- 件数が多いと1回で全部取れないので、続きを取得する（切り替えで全件＝要望）。 -->
+      <!-- 全件取得の安全弁（25ページ）を超えた時だけ続きを取得（通常は出ない＝#5 の誤表示解消） -->
       <div v-if="worksHasMore && !worksLoading" class="load-more-wrap">
         <button type="button" class="load-more-btn" :disabled="worksLoadingMore" @click="loadMoreWorks">
-          {{ worksLoadingMore ? '読み込み中…' : 'もっと読み込む' }}
+          {{ worksLoadingMore ? '読み込み中…' : 'さらに読み込む' }}
         </button>
       </div>
-    </div>
 
-    <!-- 制作会社の作品（アニメ）。役割行・スタジオバッジ無しの簡易グリッド（独立パス）。 -->
-    <div v-if="selectedStudio" class="works-section">
-      <div class="works-head">
-        <h2>
-          {{ selectedStudio.name }} の制作作品
-          <span v-if="worksLoading" class="works-loading-indicator">読み込み中...</span>
-        </h2>
-      </div>
-
-      <p v-if="worksError" class="status-error">{{ worksError }}</p>
-      <p v-if="worksNotice" class="status-notice">{{ worksNotice }}</p>
-
-      <div v-if="filteredWorks.length > 1" class="works-controls">
-        <div class="sort-toggle" role="group" aria-label="並び順">
-          <button type="button" class="sort-btn" :class="{ 'is-active': worksSort === 'old' }" @click="worksSort = 'old'">古い順</button>
-          <button type="button" class="sort-btn" :class="{ 'is-active': worksSort === 'new' }" @click="worksSort = 'new'">新しい順</button>
-        </div>
-        <span class="works-count">{{ filteredWorks.length }}件{{ worksHasMore ? '＋' : '' }}</span>
-      </div>
-
-      <div v-if="filteredWorks.length > 0" class="works-grid">
-        <div
-          v-for="edge in sortedWorks"
-          :key="edge.node.siteUrl"
-          class="work-card"
-        >
-          <a :href="edge.node.siteUrl" target="_blank" rel="noopener">
-            <img
-              v-if="edge.node.coverImage?.medium"
-              :src="edge.node.coverImage.medium"
-              :alt="displayTitle(edge.node.title)"
-              class="work-card-cover"
-            />
+      <!-- 「次に見るなら」レーン（おすすめ・代表作起点＝最終目標の直接回答） -->
+      <div v-if="recommendations.length > 0" class="recs">
+        <h3 class="recs-title">
+          次に見るなら
+          <span v-if="recsAnchorTitle" class="recs-anchor">「{{ recsAnchorTitle }}」が好きなら</span>
+        </h3>
+        <div class="recs-rail">
+          <a
+            v-for="r in recommendations"
+            :key="r.id"
+            :href="r.siteUrl"
+            target="_blank"
+            rel="noopener"
+            class="rec-card"
+          >
+            <img v-if="r.coverImage?.medium" :src="r.coverImage.medium" :alt="displayTitle(r.title)" class="rec-cover" loading="lazy" />
+            <span v-else class="rec-cover rec-cover-fallback" aria-hidden="true">?</span>
+            <span class="rec-title">{{ displayTitle(r.title) }}</span>
+            <span class="rec-meta">
+              <span v-if="r.averageScore != null" class="rec-score">★{{ r.averageScore }}</span>
+              {{ r.year ?? '' }}
+            </span>
           </a>
-          <div class="work-card-body">
-            <a
-              :href="edge.node.siteUrl"
-              target="_blank"
-              rel="noopener"
-              class="work-card-title"
-            >
-              {{ displayTitle(edge.node.title) }}
-            </a>
-            <div class="work-card-year">
-              {{ edge.node.startDate?.year ?? '年不明' }}
-            </div>
-            <a
-              :href="purchaseLink(edge.node.title)"
-              target="_blank"
-              :rel="purchaseRel"
-              class="work-card-buy"
-            ><span v-if="affiliateActive" class="ad-badge">広告</span>Amazon で探す</a>
-          </div>
         </div>
-      </div>
-
-      <p v-else-if="!worksLoading && !worksError" class="status-empty">
-        この制作会社の作品が見つかりませんでした。
-      </p>
-
-      <div v-if="worksHasMore && !worksLoading" class="load-more-wrap">
-        <button type="button" class="load-more-btn" :disabled="worksLoadingMore" @click="loadMoreWorks">
-          {{ worksLoadingMore ? '読み込み中…' : 'もっと読み込む' }}
-        </button>
       </div>
     </div>
 
@@ -475,9 +560,9 @@ const AFFILIATE_TAG = (config.public.affiliateTag as string) || ''
 const affiliateActive = computed(() => AFFILIATE_TAG.length > 0)
 
 // ── SEO / OGP / favicon（R2）──────────────────────────────────────────────
-const SITE_TITLE = 'Creator Discovery — 漫画家から作品をたどる'
+const SITE_TITLE = 'Creator Discovery — 作り手から、次に見る作品を見つける'
 const SITE_DESC =
-  '好きな漫画家・原作者を検索して、その作品とアニメ化した制作会社をたどれる discovery ツール。データは AniList。'
+  '好きな作者・監督・声優・制作会社から、その作品をたどって「次に見る一本」を見つける discovery ツール。高評価順の並べ替え・絞り込み・おすすめ付き。データは AniList。'
 // OGP 画像は絶対 URL が望ましい。公開ドメインが分かれば SITE_URL で絶対化する。
 const OG_IMAGE = SITE_URL ? `${SITE_URL}/og-image.png` : '/og-image.png'
 useHead({
@@ -515,6 +600,90 @@ function retryDelayMs(e: unknown, fallbackMs: number): number {
     ?.response?.headers?.get?.('retry-after')
   const sec = ra ? parseInt(ra, 10) : NaN
   return Number.isFinite(sec) && sec > 0 ? Math.min(sec * 1000 + 500, 70000) : fallbackMs
+}
+
+// ── AniList リクエスト・ゲートウェイ（#2: レート上限に当たりにくくする土台）──────────
+// すべての AniList 呼び出しをここに集約する。狙い:
+//  1) バースト抑制: 同時実行を絞り（並行2）、リクエスト開始の最小間隔を空ける。
+//  2) 429 全体バックオフ: 1本でも 429 を踏んだら全リクエストを Retry-After ぶん停止し自動再試行。
+//  3) 結果キャッシュ + in-flight 統合: 同じ (query,variables) は1回だけ投げて使い回す。
+// 全ページ取得（#3/#5）でリクエスト数が増えても、ここで間隔を空けるので上限に当たりにくい。
+const ANILIST_MIN_GAP_MS = 360    // リクエスト開始の最小間隔（ms）
+const ANILIST_MAX_CONCURRENT = 2  // 同時実行数（typeahead の複数表記が極端に遅くならない範囲）
+const ANILIST_MAX_RETRY = 3       // 429 の自動リトライ回数
+const responseCache = new Map<string, any>() // (query+vars) → 応答（再選択・戻る操作で使い回す）
+const inflight = new Map<string, Promise<any>>()
+let activeRequests = 0
+let nextSlotAt = 0      // 次にリクエストを開始してよい時刻（最小間隔のスタガリング用）
+let cooldownUntil = 0   // 429 を踏んだら全リクエストをこの時刻まで停止
+
+function cacheKey(query: string, variables: Record<string, unknown> | undefined): string {
+  return JSON.stringify({ q: query, v: variables ?? {} })
+}
+
+const slotWaiters: (() => void)[] = []
+
+// 同時実行スロット＋最小間隔＋クールダウンが空くまで待つ。開始時刻スロットは同期的に
+// 予約する（nextSlotAt を await 前に進める）ので、並行呼び出しでも開始がばらける。
+async function acquireSlot(): Promise<void> {
+  if (activeRequests >= ANILIST_MAX_CONCURRENT) {
+    await new Promise<void>(res => slotWaiters.push(res))
+  }
+  activeRequests++
+  const now = Date.now()
+  const start = Math.max(now, cooldownUntil, nextSlotAt)
+  nextSlotAt = start + ANILIST_MIN_GAP_MS
+  const wait = start - now
+  if (wait > 0) await sleep(wait)
+}
+
+function releaseSlot(): void {
+  activeRequests--
+  const next = slotWaiters.shift()
+  if (next) next()
+}
+
+// AniList GraphQL を1回叩く（キャッシュ/間隔/429 自動リトライ込み）。失敗は呼び出し側へ投げる。
+async function anilist<T = any>(
+  query: string,
+  variables?: Record<string, unknown>,
+  opts: { cache?: boolean } = {}
+): Promise<T> {
+  const useCache = opts.cache !== false
+  const key = cacheKey(query, variables)
+  if (useCache && responseCache.has(key)) return responseCache.get(key) as T
+  const existing = inflight.get(key)
+  if (existing) return existing as Promise<T>
+
+  const run = (async () => {
+    for (let attempt = 0; ; attempt++) {
+      await acquireSlot()
+      try {
+        const data = await $fetch<T>(ANILIST, {
+          method: 'POST',
+          body: { query, variables: variables ?? {} }
+        })
+        if (useCache) responseCache.set(key, data)
+        return data
+      } catch (e) {
+        // 429 は全体クールダウン（Retry-After 尊重）を設定して自動再試行
+        if (isRateLimited(e) && attempt < ANILIST_MAX_RETRY) {
+          const delay = retryDelayMs(e, 1500 * (attempt + 1))
+          cooldownUntil = Math.max(cooldownUntil, Date.now() + delay)
+          continue
+        }
+        throw e
+      } finally {
+        releaseSlot()
+      }
+    }
+  })()
+  inflight.set(key, run)
+  try {
+    return await run
+  } finally {
+    inflight.delete(key)
+  }
 }
 
 // 作品タイトルから購入導線（Amazon.co.jp 検索）を生成。タグが空なら中立リンク。
@@ -575,12 +744,16 @@ function isAuthorPerson(occ: string[]): boolean {
 function isDirectorPerson(occ: string[]): boolean {
   return occ.some(o => o === 'Director' || o === 'Chief Director')
 }
-// creator モード=著者系のみ（明確な監督/声優を除外）、director モード=監督系のみ。
-// occ 空（不明）は両モードとも残す。実測: 山田尚子=['Director','Storyboard Artist']→
-// creator から除外・director で残す。尾田=['Mangaka']→creator で残す・director から除外。
+function isVoicePerson(occ: string[]): boolean {
+  return occ.some(o => o === 'Voice Actor')
+}
+// creator=著者系のみ / director=監督系のみ / voice=声優のみ。occ 空（不明）は全モード残す。
+// 実測: 山田尚子=['Director','Storyboard Artist']→creator から除外・director で残す。
+// 尾田=['Mangaka']→creator で残す。花澤香菜=['Voice Actor']→voice で残す。
 function matchesSearchMode(occ: string[], mode: SearchMode): boolean {
   if (occ.length === 0) return true
   if (mode === 'director') return isDirectorPerson(occ)
+  if (mode === 'voice') return isVoicePerson(occ)
   return isAuthorPerson(occ) // creator
 }
 
@@ -618,17 +791,25 @@ interface RecentItem {
   name: string
   type?: string
 }
-// 「最近見た」はモードごとに別リスト（#1: 作品/作者/監督/制作会社）。searchMode と同じキー。
-type RecentKind = 'creator' | 'title' | 'director' | 'studio'
+// 「最近見た」はモードごとに別リスト（#1: 作者/作品/監督/声優/制作会社）。searchMode と同じキー。
+type RecentKind = 'creator' | 'title' | 'director' | 'voice' | 'studio'
 
 interface WorkEdge {
   staffRole: string
+  // 声優モードで「演じたキャラ」を表示するための任意フィールド（他モードでは undefined）。
+  characters?: { id: number; name: string | null; image: string | null }[]
   node: {
     id: number
     title: { native: string | null; romaji: string | null; english: string | null }
     startDate: { year: number | null } | null
     coverImage: { medium: string } | null
     siteUrl: string
+    averageScore: number | null  // 0–100。★評価チップ・高評価ソート・隠れた名作判定に使う
+    popularity: number | null    // 人気の代理指標。人気ソート・隠れた名作（高評価×低人気）に使う
+    genres: string[]             // ジャンル（チップ＋フィルタ）
+    episodes: number | null      // 話数（形態チップ＋「1クールで見られる」判断）
+    format: string | null        // TV / MOVIE / OVA / MANGA …（形態チップ＋フィルタ）
+    status: string | null        // FINISHED / RELEASING …（連載中/完結フィルタ）
     relations: {
       edges: { relationType: string; node: { id: number; type: string } }[]
     }
@@ -637,14 +818,16 @@ interface WorkEdge {
 
 // State
 const searchQuery = ref('')
-// 検索モード: 作者(staff) / 作品名(media 逆引き) / 制作会社(studio)。監督・声優は次段で追加予定。
-type SearchMode = 'creator' | 'title' | 'director' | 'studio'
+// 検索モード: 作者 / 作品名(逆引き) / 監督 / 声優 / 制作会社。creator・director・voice は同じ
+// staff(search) を叩き、候補を職業で出し分ける（AniList に役割別検索が無い）。
+type SearchMode = 'creator' | 'title' | 'director' | 'voice' | 'studio'
 const searchMode = ref<SearchMode>('creator')
-// 検索タブ。広い画面は横並びタブ、狭い画面はプルダウン（search-mode-select）に切替。
+// 検索タブ。広い画面は横並びタブ、狭い画面は独自メニュー（mode-menu）に切替。
 const SEARCH_TABS: { mode: SearchMode; label: string }[] = [
   { mode: 'creator', label: '作者' },
   { mode: 'title', label: '作品名' },
   { mode: 'director', label: '監督' },
+  { mode: 'voice', label: '声優' },
   { mode: 'studio', label: '制作会社' },
 ]
 const staffCandidates = ref<StaffCandidate[]>([])
@@ -658,16 +841,76 @@ const selectedStaff = ref<StaffCandidate | null>(null)
 // 制作会社モードで選択中のスタジオ（works-section を出すもう一つのトリガ）
 const selectedStudio = ref<StudioCandidate | null>(null)
 // 最近見た（モード別・most-recent-first・id でユニーク・各上限8）。
-const recentByKind = ref<Record<RecentKind, RecentItem[]>>({ creator: [], title: [], director: [], studio: [] })
+const recentByKind = ref<Record<RecentKind, RecentItem[]>>({ creator: [], title: [], director: [], voice: [], studio: [] })
 const filteredWorks = ref<WorkEdge[]>([])
 // 選択中の作り手の作品が「作者作品」か「監督作品」か（見出しの出し分け＝検索タブと独立。
 // 作品名チューザから監督を選んだ場合も正しく「監督作品」見出しになる）。
-const selectedStaffKind = ref<'author' | 'director'>('author')
-// 作品グリッドの並び順（初期は古い順。トグルで新しい順へ）。新しい選択ごとに古い順へ戻す。
-const worksSort = ref<'old' | 'new'>('old')
-// 段階ロード: まだ続きのページがあるか／追加ロード中か（「もっと読み込む」で全件取得）。
+const selectedStaffKind = ref<'author' | 'director' | 'voice'>('author')
+// 作品グリッドの並び順（#4）。score=高評価 / pop=人気 / new=新しい / old=古い / hidden=隠れた名作。
+// 既定は高評価順（最終目標「どれを次に見ればいいか」に最も効く）。新しい選択ごとに既定へ戻す。
+type SortMode = 'score' | 'pop' | 'new' | 'old' | 'hidden'
+const DEFAULT_SORT: SortMode = 'score'
+const SORT_TABS: { mode: SortMode; label: string }[] = [
+  { mode: 'score', label: '高評価順' },
+  { mode: 'pop', label: '人気順' },
+  { mode: 'hidden', label: '隠れた名作' },
+  { mode: 'new', label: '新しい順' },
+  { mode: 'old', label: '古い順' },
+]
+const worksSort = ref<SortMode>(DEFAULT_SORT)
+// 全ページ取得（#3/#5）: cap に達した時だけ「さらに読み込む」を出す／追加ロード中か／取得済み件数。
 const worksHasMore = ref(false)
 const worksLoadingMore = ref(false)
+const worksLoadedCount = ref(0)
+
+// ── フィルター（ユーザー要望: 関わり方・評価◯以上・いろんな観点）。全件ロード済みに
+//    クライアント側で適用する（全ページ取得とセット＝全作品に対して効く）──────────────
+const filterRole = ref('')        // 関わり方（staffRole）。''=すべて
+const filterMinScore = ref(0)     // 最低評価（averageScore >= n）。0=指定なし
+const filterFormat = ref('')      // 形態（TV/MOVIE/OVA…）。''=すべて
+const filterStatus = ref('')      // 連載中/完結（RELEASING/FINISHED）。''=すべて
+const filterGenres = ref<Set<string>>(new Set()) // ジャンル（選択のどれかを含む＝OR）
+const filterUnseenOnly = ref(false) // 未見のみ（「見た/読んだ」印で既見を除外）
+const filterDrawerOpen = ref(false) // モバイルのフィルタ・ドロワー開閉（ハンバーガー式）
+
+function clearFilters() {
+  filterRole.value = ''
+  filterMinScore.value = 0
+  filterFormat.value = ''
+  filterStatus.value = ''
+  filterGenres.value = new Set()
+  filterUnseenOnly.value = false
+}
+const activeFilterCount = computed(() =>
+  (filterRole.value ? 1 : 0) + (filterMinScore.value ? 1 : 0) + (filterFormat.value ? 1 : 0) +
+  (filterStatus.value ? 1 : 0) + (filterGenres.value.size > 0 ? 1 : 0) + (filterUnseenOnly.value ? 1 : 0)
+)
+function toggleGenre(g: string) {
+  const next = new Set(filterGenres.value)
+  next.has(g) ? next.delete(g) : next.add(g)
+  filterGenres.value = next
+}
+
+// ── 「見た/読んだ」印（端末内・localStorage・SSR 安全）。既見を除外/淡色化して未見を残す ──
+const seenIds = ref<Set<number>>(new Set())
+const SEEN_KEY = 'cd_seen'
+function loadSeen() {
+  if (!import.meta.client || typeof window === 'undefined') return
+  try {
+    const raw = window.localStorage.getItem(SEEN_KEY)
+    const arr = raw ? JSON.parse(raw) : []
+    if (Array.isArray(arr)) seenIds.value = new Set(arr.filter((x: any) => typeof x === 'number'))
+  } catch { /* 壊れていたら空のまま（機能は劣化させない） */ }
+}
+function toggleSeen(id: number) {
+  const next = new Set(seenIds.value)
+  next.has(id) ? next.delete(id) : next.add(id)
+  seenIds.value = next
+  if (!import.meta.client || typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(SEEN_KEY, JSON.stringify([...next]))
+  } catch { /* quota 等は無視 */ }
+}
 // manga node id → アニメ化した制作会社名（頻度順）
 const studioBadges = ref<Record<number, string[]>>({})
 // +N を押して制作会社を全件展開中の manga node id
@@ -718,13 +961,15 @@ function displayTitle(title: { native: string | null; romaji: string | null; eng
 }
 
 // 検索欄のプレースホルダ（モードで切替）
-const CREATOR_PLACEHOLDER = 'スタッフ名（漢字・かな・ローマ字）　例: 井上雄彦 / いのうえ / inoue'
-const TITLE_PLACEHOLDER = '作品名（漫画・アニメ）　例: 進撃の巨人 / チェンソーマン'
+const CREATOR_PLACEHOLDER = '作者名（漢字・かな・ローマ字）　例: 井上雄彦 / いのうえ / inoue'
+const TITLE_PLACEHOLDER = '作品名（漫画・アニメ）　例: 進撃の巨人 / すずみや'
 const DIRECTOR_PLACEHOLDER = '監督名（漢字・かな・ローマ字）　例: 新海誠 / 山田尚子'
+const VOICE_PLACEHOLDER = '声優名（漢字・かな・ローマ字）　例: 花澤香菜 / はなざわ / hanazawa'
 const STUDIO_PLACEHOLDER = '制作会社（アニメスタジオ）　例: MAPPA / ufotable / 京都アニメーション'
 const searchPlaceholder = computed(() =>
   searchMode.value === 'title' ? TITLE_PLACEHOLDER
     : searchMode.value === 'director' ? DIRECTOR_PLACEHOLDER
+    : searchMode.value === 'voice' ? VOICE_PLACEHOLDER
     : searchMode.value === 'studio' ? STUDIO_PLACEHOLDER
     : CREATOR_PLACEHOLDER
 )
@@ -734,6 +979,7 @@ const RECENT_LABELS: Record<RecentKind, string> = {
   creator: '最近見た作者',
   title: '最近見た作品',
   director: '最近見た監督',
+  voice: '最近見た声優',
   studio: '最近見た制作会社',
 }
 // 現在モードの recent リストとラベル（searchMode は RecentKind と同じ集合）。
@@ -748,20 +994,160 @@ const showRecent = computed(() =>
 
 // 作品セクション見出しの接尾辞（監督作品なら「の監督作品」）。検索タブではなく
 // selectedStaffKind を見る＝作品名チューザから監督を選んでも正しく出る。
-const staffWorksSuffix = computed(() => selectedStaffKind.value === 'director' ? ' の監督作品' : ' の作品')
+const staffWorksSuffix = computed(() =>
+  selectedStaffKind.value === 'director' ? ' の監督作品'
+    : selectedStaffKind.value === 'voice' ? ' の出演作'
+    : ' の作品'
+)
 
-// 表示用の並べ替え（古い順/新しい順）。年不明は常に末尾。元の filteredWorks は触らない。
-const sortedWorks = computed<WorkEdge[]>(() => {
-  const arr = filteredWorks.value.slice()
+// ── UI 状態: モバイルのモードメニュー（ハンバーガー）／絞り込みパネル ─────────────────
+const modeMenuOpen = ref(false)    // 狭い画面のモード選択メニュー（タップで開閉・選択で自動クローズ）
+const filterPanelOpen = ref(false) // 絞り込みパネル（デスクトップ=インライン / モバイル=ドロワー）
+const currentModeLabel = computed(() => SEARCH_TABS.find(t => t.mode === searchMode.value)?.label ?? '')
+function onPickMode(mode: SearchMode) {
+  modeMenuOpen.value = false       // 選んだら自動で閉じる（ユーザー要望）
+  setSearchMode(mode)
+}
+function toggleFilterPanel() { filterPanelOpen.value = !filterPanelOpen.value }
+
+// 作品セクションの見出し（作者/監督/声優は名前＋接尾辞、制作会社は「◯◯ の制作作品」）。
+const worksHeading = computed(() => {
+  if (selectedStudio.value) return `${selectedStudio.value.name} の制作作品`
+  if (selectedStaff.value) return `${selectedStaff.value.name.native || selectedStaff.value.name.full}${staffWorksSuffix.value}`
+  return ''
+})
+
+// 「迷ったら」から代表作カードへスクロール（その作品を見える位置へ）。
+function scrollToWork(id: number) {
+  if (typeof document === 'undefined') return
+  document.getElementById(`work-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
+// ── ジャンル/形態/ステータス/ロールの日本語表示 ────────────────────────────────────
+const GENRE_JP: Record<string, string> = {
+  Action: 'アクション', Adventure: '冒険', Comedy: 'コメディ', Drama: 'ドラマ',
+  Ecchi: 'エッチ', Fantasy: 'ファンタジー', Horror: 'ホラー', 'Mahou Shoujo': '魔法少女',
+  Mecha: 'メカ', Music: '音楽', Mystery: 'ミステリー', Psychological: 'サイコ',
+  Romance: 'ロマンス', 'Sci-Fi': 'SF', 'Slice of Life': '日常', Sports: 'スポーツ',
+  Supernatural: '超常', Thriller: 'スリラー', Hentai: 'R18',
+}
+const genreJp = (g: string) => GENRE_JP[g] ?? g
+const FORMAT_JP: Record<string, string> = {
+  TV: 'TV', TV_SHORT: 'TV短編', MOVIE: '劇場', OVA: 'OVA', ONA: 'ONA',
+  SPECIAL: '特別編', MUSIC: 'MV', MANGA: '漫画', NOVEL: '小説', ONE_SHOT: '読切',
+}
+const formatJp = (f: string | null) => (f ? FORMAT_JP[f] ?? f : '')
+const STATUS_JP: Record<string, string> = {
+  FINISHED: '完結', RELEASING: '連載・放送中', NOT_YET_RELEASED: '未放送',
+  CANCELLED: '中止', HIATUS: '休止',
+}
+const statusJp = (s: string | null) => (s ? STATUS_JP[s] ?? s : '')
+const WORK_ROLE_JP: Record<string, string> = {
+  'Story & Art': '原作・作画', Story: '原作/脚本', Art: '作画',
+  'Original Creator': '原作', 'Original Story': '原作', Illustration: '作画',
+  'Character Design': 'キャラ原案',
+}
+const workRoleJp = (r: string) => WORK_ROLE_JP[r] ?? r
+
+// 形態チップ（例「劇場」「TV 12話」）。話数は TV/ONA 系のみ意味があるので添える。
+function formatChip(node: WorkEdge['node']): string {
+  const f = formatJp(node.format)
+  if ((node.format === 'TV' || node.format === 'ONA' || node.format === 'TV_SHORT') && node.episodes) {
+    return `${f} ${node.episodes}話`
+  }
+  return f
+}
+
+// ── フィルタの選択肢（ロード済み作品に実在する値だけ＝空振りしない）──────────────────
+const roleOptions = computed(() => {
+  const s = new Set<string>()
+  for (const e of filteredWorks.value) if (e.staffRole) s.add(e.staffRole)
+  return [...s]
+})
+const genreOptions = computed(() => {
+  const s = new Set<string>()
+  for (const e of filteredWorks.value) for (const g of e.node.genres) s.add(g)
+  return [...s].sort()
+})
+const formatOptions = computed(() => {
+  const s = new Set<string>()
+  for (const e of filteredWorks.value) if (e.node.format) s.add(e.node.format)
+  return [...s]
+})
+const statusOptions = computed(() => {
+  const s = new Set<string>()
+  for (const e of filteredWorks.value) if (e.node.status) s.add(e.node.status)
+  return [...s]
+})
+
+// ── 表示パイプライン: フィルタ → ソート、および 代表作 / 隠れた名作の導出 ───────────
+function passesFilters(e: WorkEdge): boolean {
+  if (filterRole.value && e.staffRole !== filterRole.value) return false
+  if (filterMinScore.value && (e.node.averageScore ?? 0) < filterMinScore.value) return false
+  if (filterFormat.value && e.node.format !== filterFormat.value) return false
+  if (filterStatus.value && e.node.status !== filterStatus.value) return false
+  if (filterGenres.value.size && !e.node.genres.some(g => filterGenres.value.has(g))) return false
+  if (filterUnseenOnly.value && seenIds.value.has(e.node.id)) return false
+  return true
+}
+const filteredForDisplay = computed<WorkEdge[]>(() => filteredWorks.value.filter(passesFilters))
+
+const maxPopularity = computed(() => {
+  let m = 0
+  for (const e of filteredForDisplay.value) m = Math.max(m, e.node.popularity ?? 0)
+  return m || 1
+})
+
+// フィルタ後を並べ替える。null（評価/人気/年 不明）は常に末尾。元配列は触らない。
+const displayWorks = computed<WorkEdge[]>(() => {
+  const arr = filteredForDisplay.value.slice()
+  const yr = (e: WorkEdge) => e.node.startDate?.year ?? null
+  const sc = (e: WorkEdge) => e.node.averageScore ?? null
+  const pp = (e: WorkEdge) => e.node.popularity ?? null
+  const cmp = (a: number | null, b: number | null, dir: number) => {
+    if (a === null && b === null) return 0
+    if (a === null) return 1
+    if (b === null) return -1
+    return (b - a) * dir // dir=1 → 降順 / dir=-1 → 昇順
+  }
+  const maxPop = maxPopularity.value
+  const hiddenScore = (e: WorkEdge) =>
+    (e.node.averageScore ?? 0) - 14 * ((e.node.popularity ?? 0) / maxPop)
   arr.sort((a, b) => {
-    const ya = a.node.startDate?.year ?? null
-    const yb = b.node.startDate?.year ?? null
-    if (ya === null && yb === null) return 0
-    if (ya === null) return 1
-    if (yb === null) return -1
-    return worksSort.value === 'old' ? ya - yb : yb - ya
+    switch (worksSort.value) {
+      case 'score': return cmp(sc(a), sc(b), 1)
+      case 'pop': return cmp(pp(a), pp(b), 1)
+      case 'new': return cmp(yr(a), yr(b), 1)
+      case 'old': return cmp(yr(a), yr(b), -1)
+      case 'hidden': return hiddenScore(b) - hiddenScore(a)
+      default: return 0
+    }
   })
   return arr
+})
+
+// 代表作（迷ったら最初の1作）: 評価を主軸に人気を最大8点ぶん加点した「旗艦」を1つ選ぶ
+// （無名の高評価短編より定番が勝つ）。フィルタ後の集合から選ぶ＝今見ている範囲の最有力。
+const repWork = computed<WorkEdge | null>(() => {
+  let best: WorkEdge | null = null
+  let bestKey = -Infinity
+  const maxPop = maxPopularity.value
+  for (const e of filteredForDisplay.value) {
+    if (e.node.averageScore == null) continue
+    const key = e.node.averageScore + 8 * ((e.node.popularity ?? 0) / maxPop)
+    if (key > bestKey) { bestKey = key; best = e }
+  }
+  return best
+})
+
+// 隠れた名作: 高評価（≥78）だが人気が控えめ（セット最大人気の25%未満）。人気順では埋もれる「次の一本」。
+const hiddenGemIds = computed<Set<number>>(() => {
+  const maxPop = maxPopularity.value
+  const ids = new Set<number>()
+  for (const e of filteredForDisplay.value) {
+    if ((e.node.averageScore ?? 0) >= 78 && (e.node.popularity ?? 0) < 0.25 * maxPop) ids.add(e.node.id)
+  }
+  return ids
 })
 
 // 作品候補の補助タグ（種別・フォーマット・年）。例「アニメ・TV・2013」
@@ -779,6 +1165,7 @@ const RECENT_KEYS: Record<RecentKind, string> = {
   creator: 'cd_recent_creator',
   title: 'cd_recent_title',
   director: 'cd_recent_director',
+  voice: 'cd_recent_voice',
   studio: 'cd_recent_studio',
 }
 const RECENT_CAP = 8
@@ -807,6 +1194,7 @@ function loadAllRecent() {
     creator: loadRecentKind('creator'),
     title: loadRecentKind('title'),
     director: loadRecentKind('director'),
+    voice: loadRecentKind('voice'),
     studio: loadRecentKind('studio'),
   }
   if (!import.meta.client || typeof window === 'undefined') return
@@ -934,8 +1322,13 @@ function onKeydown(e: KeyboardEvent) {
 
 // ドロップダウン外のクリックで閉じる（client-side のみ）
 function onDocClick(e: MouseEvent) {
+  const target = e.target as Node
   const box = searchInputEl.value?.closest('.search-box')
-  if (box && !box.contains(e.target as Node)) closeDropdown()
+  if (box && !box.contains(target)) closeDropdown()
+  // モバイルのモードメニューも外クリックで閉じる
+  if (modeMenuOpen.value && !(target as HTMLElement)?.closest?.('.mode-menu')) {
+    modeMenuOpen.value = false
+  }
 }
 
 // プログラムから検索欄を書き換える時、再検索 watch を1回だけ抑止する。
@@ -960,8 +1353,9 @@ function cancelPendingSearch() {
 
 onMounted(() => {
   document.addEventListener('click', onDocClick)
-  // 最近見た（全モード）を localStorage から復元（client のみ）
+  // 最近見た（全モード）＋「見た/読んだ」印を localStorage から復元（client のみ）
   loadAllRecent()
+  loadSeen()
   // 共有 URL で直接開かれたら復元（?studio を優先、無ければ ?staff）。
   const studioId = parseInt(String(route.query.studio ?? ''), 10)
   const staffId = parseInt(String(route.query.staff ?? ''), 10)
@@ -1056,42 +1450,22 @@ const TITLE_SEARCH_QUERY = `
   }
 `
 
-// term 単位の検索結果キャッシュ（同じ語の再リクエストを避けてレート負荷を下げる）
-const staffSearchCache = new Map<string, StaffCandidate[]>()
-
-// 1 表記ぶんの検索。失敗しても [] を返してマージを止めない。
-// 429（レート上限）だけは握り潰さず呼び出し側へ伝える。成功結果はキャッシュする。
+// 1 表記ぶんの検索。失敗しても [] を返してマージを止めない（キャッシュ/間隔は anilist() が担当）。
+// 429（レート上限）だけは握り潰さず呼び出し側へ伝える。
 async function fetchStaff(term: string): Promise<{ staff: StaffCandidate[]; rateLimited: boolean }> {
-  const cached = staffSearchCache.get(term)
-  if (cached) return { staff: cached, rateLimited: false }
   try {
-    const data = await $fetch<{ data: { Page: { staff: StaffCandidate[] } } }>(ANILIST, {
-      method: 'POST',
-      body: { query: SEARCH_QUERY, variables: { s: term } }
-    })
-    const staff = data.data.Page.staff
-    staffSearchCache.set(term, staff)
-    return { staff, rateLimited: false }
+    const data = await anilist<{ data: { Page: { staff: StaffCandidate[] } } }>(SEARCH_QUERY, { s: term })
+    return { staff: data.data.Page.staff ?? [], rateLimited: false }
   } catch (e) {
     return { staff: [], rateLimited: isRateLimited(e) }
   }
 }
 
-// term 単位の作品検索キャッシュ（同じ語の再リクエストを避けてレート負荷を下げる）
-const mediaSearchCache = new Map<string, MediaCandidate[]>()
-
 // 1 表記ぶんの作品検索。失敗しても [] を返してマージを止めない。429 だけは伝える。
 async function fetchMedia(term: string): Promise<{ media: MediaCandidate[]; rateLimited: boolean }> {
-  const cached = mediaSearchCache.get(term)
-  if (cached) return { media: cached, rateLimited: false }
   try {
-    const data = await $fetch<{ data: { Page: { media: MediaCandidate[] } } }>(ANILIST, {
-      method: 'POST',
-      body: { query: TITLE_SEARCH_QUERY, variables: { s: term } }
-    })
-    const media = data.data.Page.media ?? []
-    mediaSearchCache.set(term, media)
-    return { media, rateLimited: false }
+    const data = await anilist<{ data: { Page: { media: MediaCandidate[] } } }>(TITLE_SEARCH_QUERY, { s: term })
+    return { media: data.data.Page.media ?? [], rateLimited: false }
   } catch (e) {
     return { media: [], rateLimited: isRateLimited(e) }
   }
@@ -1161,10 +1535,10 @@ async function executeSearch() {
       return toks.length > 0 && toks.every(tok => fullName.includes(tok))
     })
 
-    // 純・声優/ボーカルだけの人を除外（精密判定＝正当な作り手を巻き込まない）
-    const pureVoice = isPureVoice(c.primaryOccupations)
+    // 純・声優/ボーカルだけの人を除外（精密判定）。ただし声優モードでは当然残す。
+    const pureVoice = searchMode.value !== 'voice' && isPureVoice(c.primaryOccupations)
 
-    // モード別（#5）: creator は著者系のみ・director は監督系のみ（occ 空は両方残す）
+    // モード別（#5）: creator=著者系・director=監督系・voice=声優系（occ 空は全モード残す）
     return isRelevant && !pureVoice && matchesSearchMode(c.primaryOccupations, searchMode.value)
   })
 
@@ -1214,11 +1588,17 @@ async function executeTitleSearch(q: string) {
   selectedStaff.value = null
   filteredWorks.value = []
 
-  // AniList は ひらがな↔カタカナ を変換しない（実測: わんぴーす では ONE PIECE が出ない）。
-  // 作者検索と同じく複数表記を投げて id で統合する。タイトルは外来語が多く romaji 化は
-  // ノイズ（進撃→"進撃no巨人"）になるので、ここは かな2系統だけに絞る。
+  // AniList は ひらがな↔カタカナ も かな↔漢字 も変換しない。複数表記を投げて id で統合する。
+  // 漢字を含む入力の romaji 化は "進撃no巨人" のようなノイズになるので足さない。一方、
+  // 純かな入力（漢字なし）は漢字 native にもローマ字 title にも当たらない＝
+  // ローマ字読みを足すと拾える（「すずみや」→"suzumiya"→ romaji "Suzumiya..." でハルヒが出る）。
   const hasKana = /[぀-ヿ]/.test(q)
-  const terms = hasKana ? [...new Set([q, toHiragana(q), toKatakana(q)])] : [q]
+  const hasKanji = /[一-鿿]/.test(q)
+  const terms = hasKana
+    ? (hasKanji
+        ? [...new Set([q, toHiragana(q), toKatakana(q)])]
+        : [...new Set([q, toHiragana(q), toKatakana(q), toRomaji(q)])])
+    : [q]
 
   // stale レスポンス対策（作者検索と連番を共有）
   const mySeq = ++requestSeq
@@ -1308,7 +1688,7 @@ const STUDIO_WORKS_QUERY = `
   query($id: Int, $p: Int) {
     Studio(id: $id) {
       name
-      media(isMain: true, sort: [START_DATE_DESC], page: $p, perPage: 50) {
+      media(isMain: true, sort: [SCORE_DESC], page: $p, perPage: 50) {
         pageInfo { hasNextPage }
         nodes {
           id
@@ -1316,6 +1696,7 @@ const STUDIO_WORKS_QUERY = `
           startDate { year }
           coverImage { medium }
           siteUrl
+          averageScore popularity genres episodes format status
         }
       }
     }
@@ -1328,6 +1709,12 @@ interface StudioWorkNode {
   startDate: { year: number | null } | null
   coverImage: { medium: string } | null
   siteUrl: string
+  averageScore: number | null
+  popularity: number | null
+  genres: string[]
+  episodes: number | null
+  format: string | null
+  status: string | null
 }
 
 // 制作会社モードの検索。日本語名は別名表でローマ字根へ橋渡しし（#2）、当たらない
@@ -1362,10 +1749,7 @@ async function executeStudioSearch(q: string) {
   }
 
   try {
-    const data = await $fetch<{ data: { Page: { studios: StudioCandidate[] } } }>(ANILIST, {
-      method: 'POST',
-      body: { query: STUDIO_SEARCH_QUERY, variables: { s: term } }
-    })
+    const data = await anilist<{ data: { Page: { studios: StudioCandidate[] } } }>(STUDIO_SEARCH_QUERY, { s: term })
     if (mySeq !== requestSeq) return
     searchLoading.value = false
     activeIndex.value = -1
@@ -1421,7 +1805,7 @@ async function loadStudioWorks(id: number, mySeq: number) {
       }
       return { items: (st.media?.nodes ?? []) as StudioWorkNode[], hasNextPage: !!st.media?.pageInfo?.hasNextPage }
     },
-    // 並び順は sortedWorks（古い順/新しい順トグル）が担当するので transform では並べない。
+    // 並び順は displayWorks（ソートトグル）が担当するので transform では並べない。
     transform: (raw: StudioWorkNode[]) => raw.map(n => ({
       staffRole: '',
       node: {
@@ -1430,6 +1814,12 @@ async function loadStudioWorks(id: number, mySeq: number) {
         startDate: n.startDate,
         coverImage: n.coverImage,
         siteUrl: n.siteUrl,
+        averageScore: n.averageScore,
+        popularity: n.popularity,
+        genres: n.genres ?? [],
+        episodes: n.episodes,
+        format: n.format,
+        status: n.status,
         relations: { edges: [] }
       }
     })),
@@ -1485,7 +1875,7 @@ const WORKS_QUERY = `
   query($id: Int, $p: Int) {
     Staff(id: $id) {
       name { full native }
-      staffMedia(type: MANGA, sort: START_DATE, page: $p, perPage: 50) {
+      staffMedia(type: MANGA, sort: SCORE_DESC, page: $p, perPage: 50) {
         pageInfo { hasNextPage }
         edges {
           staffRole
@@ -1495,6 +1885,7 @@ const WORKS_QUERY = `
             startDate { year }
             coverImage { medium }
             siteUrl
+            averageScore popularity genres episodes format status
             relations { edges { relationType node { id type } } }
           }
         }
@@ -1512,8 +1903,10 @@ const WORKS_QUERY = `
 // ハード打ち切りはせず、1バッチ=数ページずつ取り、続きがあれば「もっと読み込む」で
 // 全件取得できるようにする（件数が多くても切り替えで全部辿れる＝ユーザー要望）。
 const RATE_LIMITED_MORE_NOTICE =
-  'AniList のレート上限です。少し待ってから「もっと読み込む」で続きを取得できます。'
-const WORKS_BATCH_PAGES = 4 // 1バッチで取るページ数（25×4≒100件）。残りは「もっと読み込む」で
+  'AniList のレート上限です。少し待ってから「さらに読み込む」で続きを取得できます。'
+// 1回の取得で辿る最大ページ数（25件/ページ×25≒625件＝実在の作家/スタジオを超える安全弁）。
+// 通常はこの手前で hasNextPage=false に達して全件取得が終わる（#3 京アニ124件=5p / #5 庵野145件=6p）。
+const EAGER_PAGE_CAP = 25
 
 // 段階ロードのコントローラ（現在表示中の作品ソース）。モード差はここに閉じ込める。
 interface WorksController {
@@ -1531,7 +1924,7 @@ let worksCtl: WorksController | null = null
 let worksRaw: any[] = [] // 生 edges/nodes の累積（再 transform 用）
 let worksCursor = 1 // 次に取るページ番号
 
-// 1バッチ分（最大 WORKS_BATCH_PAGES ページ）を取得して累積に足し、表示を更新する。
+// 全ページ（最大 EAGER_PAGE_CAP ページ）を取得して累積に足し、ページ毎に表示を更新する。
 // reset=true で先頭から（新しい選択）、false で続き（もっと読み込む）。
 async function runWorksBatch(reset: boolean) {
   const ctl = worksCtl
@@ -1539,25 +1932,27 @@ async function runWorksBatch(reset: boolean) {
   if (reset) {
     worksRaw = []
     worksCursor = 1
-    worksSort.value = 'old' // 新しい選択は初期=古い順
+    worksSort.value = DEFAULT_SORT // 新しい選択は初期=高評価順（「次に何を見るか」に効く）
+    clearFilters()                 // 新しい選択はフィルタも初期化（前の人の条件を持ち越さない）
+    recommendations.value = []     // 「次に見るなら」レーンも一旦クリア（全件取得後に再取得）
+    recsAnchorTitle.value = ''
     worksLoading.value = true
     worksError.value = ''
     worksNotice.value = ''
     worksHasMore.value = false
+    worksLoadedCount.value = 0
+    filteredWorks.value = []
   } else {
     worksLoadingMore.value = true
   }
   try {
     let pages = 0
-    while (pages < WORKS_BATCH_PAGES) {
+    while (pages < EAGER_PAGE_CAP) {
       let data: any
       try {
-        data = await $fetch<any>(ANILIST, {
-          method: 'POST',
-          body: { query: ctl.query, variables: { ...ctl.vars, p: worksCursor } }
-        })
+        data = await anilist(ctl.query, { ...ctl.vars, p: worksCursor })
       } catch (e) {
-        // バッチ途中の失敗: 既に取れたぶんは保持し、続きは後で（もっと読み込む）。
+        // 途中の失敗: 既に取れたぶんは保持し、続きは「さらに読み込む」で。
         if (worksRaw.length > 0) {
           if (isRateLimited(e)) worksNotice.value = RATE_LIMITED_MORE_NOTICE
           worksHasMore.value = true
@@ -1571,15 +1966,21 @@ async function runWorksBatch(reset: boolean) {
       worksRaw.push(...page.items)
       worksCursor++
       pages++
-      worksHasMore.value = !!page.hasNextPage
-      if (!page.hasNextPage) break
+      worksLoadedCount.value = worksRaw.length
+      // 逐次表示: 取得済みぶんを transform して即グリッドへ反映（全件待たずに見え始める）。
+      if (ctl.seq !== selectSeq) return
+      filteredWorks.value = ctl.transform(worksRaw)
+      if (!page.hasNextPage) { worksHasMore.value = false; break }
+      // まだ続きがある。cap で抜けた場合だけ「さらに読み込む」を残す。
+      worksHasMore.value = true
     }
     if (ctl.seq !== selectSeq) return
-    const works = ctl.transform(worksRaw)
-    filteredWorks.value = works
     worksLoading.value = false
     worksLoadingMore.value = false
-    if (ctl.onBatch) await ctl.onBatch(works)
+    // 全ページ取得後に1回だけ後処理（例: studio バッジの一括解決）。
+    if (ctl.onBatch) await ctl.onBatch(filteredWorks.value)
+    // 「次に見るなら」: 全件取得後、代表作のおすすめを読み込む（付加価値・失敗は無視）。
+    void loadRecommendations(pickRecAnchor(), ctl.seq)
   } catch (e) {
     if (!worksCtl || worksCtl.seq !== selectSeq) return
     worksError.value = isRateLimited(e)
@@ -1606,11 +2007,15 @@ function clearSelection() {
   worksError.value = ''
   worksNotice.value = ''
   mediaAuthorChoices.value = []
+  recommendations.value = []
+  recsAnchorTitle.value = ''
+  clearFilters()
   // 段階ロード状態もリセット
   worksCtl = null
   worksRaw = []
   worksHasMore.value = false
   worksLoadingMore.value = false
+  worksLoadedCount.value = 0
 }
 
 // 作品＋スタジオバッジを読み込む（selectedStaff は呼び出し側で先にセット済み）。
@@ -1654,7 +2059,7 @@ const DIRECTOR_WORKS_QUERY = `
   query($id: Int, $p: Int) {
     Staff(id: $id) {
       name { full native }
-      staffMedia(type: ANIME, sort: START_DATE_DESC, page: $p, perPage: 50) {
+      staffMedia(type: ANIME, sort: SCORE_DESC, page: $p, perPage: 50) {
         pageInfo { hasNextPage }
         edges {
           staffRole
@@ -1664,6 +2069,7 @@ const DIRECTOR_WORKS_QUERY = `
             startDate { year }
             coverImage { medium }
             siteUrl
+            averageScore popularity genres episodes format status
           }
         }
       }
@@ -1697,7 +2103,7 @@ async function loadDirectorWorks(id: number, mySeq: number) {
       }
       return { items: (sm.edges ?? []) as WorkEdge[], hasNextPage: !!sm.pageInfo?.hasNextPage }
     },
-    // 監督ロールのみ＋ node id で重複排除（並び順は sortedWorks が担当）。
+    // 監督ロールのみ＋ node id で重複排除（並び順は displayWorks が担当）。
     transform: (raw: WorkEdge[]) => {
       const seen = new Set<number>()
       return raw
@@ -1710,7 +2116,104 @@ async function loadDirectorWorks(id: number, mySeq: number) {
   await runWorksBatch(true)
 }
 
-// 候補クリックから選択。作者/監督モードで読み込む作品を切替える。
+// ── 声優モード（#6）: その人物が声を当てた出演作（アニメ）＋演じたキャラを表示 ──────
+const VOICE_WORKS_QUERY = `
+  query($id: Int, $p: Int) {
+    Staff(id: $id) {
+      name { full native }
+      characterMedia(sort: START_DATE_DESC, page: $p, perPage: 50) {
+        pageInfo { hasNextPage }
+        edges {
+          characterRole
+          node {
+            id
+            title { native romaji english }
+            startDate { year }
+            coverImage { medium }
+            siteUrl
+            averageScore popularity genres episodes format status
+          }
+          characters { id name { native full } image { medium } }
+        }
+      }
+    }
+  }
+`
+
+interface VoiceEdge {
+  characterRole: string
+  node: StudioWorkNode
+  characters: { id: number; name: { native: string | null; full: string } | null; image: { medium: string | null } | null }[]
+}
+
+// 声優の出演作を全ページ取得。同じ作品で複数キャラを演じる場合は作品単位に畳んでキャラを統合し、
+// 関わり方（主演/助演/端役）は最も主役寄りのロールを採る。並びは displayWorks（既定=高評価順）。
+async function loadVoiceWorks(id: number, mySeq: number) {
+  studioBadges.value = {}
+  expandedStudios.value = new Set()
+  selectedStaffKind.value = 'voice'
+  worksCtl = {
+    query: VOICE_WORKS_QUERY,
+    vars: { id },
+    pick: (data) => {
+      const cm = data?.data?.Staff?.characterMedia
+      if (!cm) return null
+      if (selectedStaff.value?.id === id && data.data.Staff?.name) {
+        selectedStaff.value = { ...selectedStaff.value, name: data.data.Staff.name }
+      }
+      return { items: (cm.edges ?? []) as VoiceEdge[], hasNextPage: !!cm.pageInfo?.hasNextPage }
+    },
+    transform: (raw: VoiceEdge[]) => {
+      const roleRank: Record<string, number> = { MAIN: 0, SUPPORTING: 1, BACKGROUND: 2 }
+      const roleJp: Record<string, string> = { MAIN: '主演', SUPPORTING: '助演', BACKGROUND: '端役' }
+      const groups = new Map<number, { edge: WorkEdge; bestRank: number }>()
+      for (const e of raw) {
+        const chars = (e.characters ?? []).map(c => ({
+          id: c.id, name: c.name?.native || c.name?.full || null, image: c.image?.medium ?? null,
+        }))
+        const rank = roleRank[e.characterRole] ?? 9
+        const g = groups.get(e.node.id)
+        if (g) {
+          for (const c of chars) if (!g.edge.characters!.some(m => m.id === c.id)) g.edge.characters!.push(c)
+          if (rank < g.bestRank) {
+            g.bestRank = rank
+            g.edge.staffRole = roleJp[e.characterRole] ?? e.characterRole
+          }
+        } else {
+          groups.set(e.node.id, {
+            bestRank: rank,
+            edge: {
+              staffRole: roleJp[e.characterRole] ?? e.characterRole,
+              characters: chars,
+              node: {
+                id: e.node.id, title: e.node.title, startDate: e.node.startDate,
+                coverImage: e.node.coverImage, siteUrl: e.node.siteUrl,
+                averageScore: e.node.averageScore, popularity: e.node.popularity,
+                genres: e.node.genres ?? [], episodes: e.node.episodes,
+                format: e.node.format, status: e.node.status, relations: { edges: [] },
+              },
+            },
+          })
+        }
+      }
+      return [...groups.values()].map(g => g.edge)
+    },
+    seq: mySeq,
+  }
+  await runWorksBatch(true)
+}
+
+// 「最近見た声優」クリック等から、出演作を id で読み込む（名前は確定済み）。
+async function selectVoiceById(id: number, name: string) {
+  selectedStudio.value = null
+  mediaAuthorChoices.value = []
+  closeDropdown()
+  const mySeq = ++selectSeq
+  selectedStaff.value = { id, name: { full: name, native: name }, primaryOccupations: [], favourites: null, image: null }
+  await loadVoiceWorks(id, mySeq)
+}
+
+// 候補クリックから選択。作者/監督/声優モードで読み込む作品を切替える。
 async function selectStaff(staff: StaffCandidate) {
   cancelPendingSearch()
   const name = staff.name.native || staff.name.full
@@ -1726,6 +2229,13 @@ async function selectStaff(staff: StaffCandidate) {
     saveRecent('director', staff.id, name)
     $posthog?.capture('creator_viewed', { staff_id: staff.id, staff_name: name, source: 'director_search' })
     await loadDirectorWorks(staff.id, mySeq)
+    return
+  }
+  // 声優モード: その人物の出演作（アニメ）を表示。最近見た声優へ保存（URL は v1 で載せない）。
+  if (searchMode.value === 'voice') {
+    saveRecent('voice', staff.id, name)
+    $posthog?.capture('creator_viewed', { staff_id: staff.id, staff_name: name, source: 'voice_search' })
+    await loadVoiceWorks(staff.id, mySeq)
     return
   }
   // 作者モード: 共有のため URL に ?staff=ID を載せる（戻る/シェア対応）。
@@ -1857,10 +2367,7 @@ async function resolveMediaToAuthor(id: number, type: string, displayName: strin
   // stale ガード: 解決中に別の選択/検索が来たら、遅れて返る応答は捨てる（Codex#1）。
   const mySeq = ++selectSeq
   try {
-    const data = await $fetch<{ data: { Media: { staff: { edges: MediaStaffEdge[] } } } }>(ANILIST, {
-      method: 'POST',
-      body: { query: MEDIA_STAFF_QUERY, variables: { id } }
-    })
+    const data = await anilist<{ data: { Media: { staff: { edges: MediaStaffEdge[] } } } }>(MEDIA_STAFF_QUERY, { id })
     if (mySeq !== selectSeq) return
     const edges = data.data.Media?.staff?.edges ?? []
     // アニメは原作＋監督＋構成/脚本/キャラ原案を出す（監督等も辿れるように＝要望）。
@@ -1955,6 +2462,12 @@ async function selectRecent(r: RecentItem) {
     await selectDirectorById(r.id, r.name)
     return
   }
+  if (mode === 'voice') {
+    saveRecent('voice', r.id, r.name)
+    $posthog?.capture('creator_viewed', { staff_id: r.id, staff_name: r.name, source: 'recent' })
+    await selectVoiceById(r.id, r.name)
+    return
+  }
   if (mode === 'title') {
     saveRecent('title', r.id, r.name, r.type)
     await resolveMediaToAuthor(r.id, r.type ?? 'MANGA', r.name)
@@ -2019,12 +2532,9 @@ async function fetchStudiosByAnime(ids: number[]): Promise<Map<number, string[]>
   const out = new Map<number, string[]>()
   for (let i = 0; i < ids.length; i += 50) {
     const chunk = ids.slice(i, i + 50)
-    const data = await $fetch<{
+    const data = await anilist<{
       data: { Page: { media: { id: number; studios: { nodes: StudioNode[] } }[] } }
-    }>(ANILIST, {
-      method: 'POST',
-      body: { query: STUDIO_QUERY, variables: { ids: chunk } }
-    })
+    }>(STUDIO_QUERY, { ids: chunk })
     for (const m of data.data.Page.media) {
       const anim = m.studios.nodes.filter(n => n.isAnimationStudio).map(n => n.name)
       // isMain は通常アニメ制作会社。フラグが付かない時だけ全 main にフォールバック
@@ -2087,6 +2597,93 @@ async function loadStudioBadges(works: WorkEdge[], mySeq: number) {
       }
       return
     }
+  }
+}
+
+// ── 「次に見るなら」レーン（おすすめ・Tier2 / 最終目標「次に何を見るか」の直接回答）──────
+// 全件取得後に、代表作（高評価×知名度の旗艦）の AniList recommendations を1本引いて
+// 「これが好きなら次は」を並べる。付加価値なので失敗は黙って省略（本体は壊さない）。
+const RECOMMENDATIONS_QUERY = `
+  query($id: Int) {
+    Media(id: $id) {
+      recommendations(sort: [RATING_DESC], perPage: 16) {
+        nodes {
+          rating
+          mediaRecommendation {
+            id type
+            title { native romaji english }
+            coverImage { medium }
+            siteUrl
+            averageScore startDate { year }
+          }
+        }
+      }
+    }
+  }
+`
+interface RecItem {
+  id: number
+  type: string
+  title: { native: string | null; romaji: string | null; english: string | null }
+  coverImage: { medium: string | null } | null
+  siteUrl: string
+  averageScore: number | null
+  year: number | null
+}
+const recommendations = ref<RecItem[]>([])
+const recsAnchorTitle = ref('') // 「『◯◯』が好きなら」の◯◯
+const recsLoading = ref(false)
+let recsSeq = 0
+
+// 推薦の起点（アンカー）= ロード済み全作品から評価×知名度が最大の1作（フィルタ非依存）。
+function pickRecAnchor(): WorkEdge | null {
+  let best: WorkEdge | null = null
+  let bestKey = -Infinity
+  let maxPop = 1
+  for (const e of filteredWorks.value) maxPop = Math.max(maxPop, e.node.popularity ?? 0)
+  for (const e of filteredWorks.value) {
+    if (e.node.averageScore == null) continue
+    const key = e.node.averageScore + 8 * ((e.node.popularity ?? 0) / maxPop)
+    if (key > bestKey) { bestKey = key; best = e }
+  }
+  return best
+}
+
+async function loadRecommendations(anchor: WorkEdge | null, mySeq: number) {
+  recommendations.value = []
+  recsAnchorTitle.value = ''
+  if (!anchor) return
+  const my = ++recsSeq
+  recsLoading.value = true
+  try {
+    const data = await anilist<{
+      data: { Media: { recommendations: { nodes: { rating: number; mediaRecommendation: {
+        id: number; type: string
+        title: { native: string | null; romaji: string | null; english: string | null }
+        coverImage: { medium: string | null } | null; siteUrl: string
+        averageScore: number | null; startDate: { year: number | null } | null
+      } | null }[] } } }
+    }>(RECOMMENDATIONS_QUERY, { id: anchor.node.id })
+    if (my !== recsSeq || mySeq !== selectSeq) return
+    const ownIds = new Set(filteredWorks.value.map(e => e.node.id)) // 本人の作品は推薦から除く
+    const seen = new Set<number>()
+    const out: RecItem[] = []
+    for (const n of data?.data?.Media?.recommendations?.nodes ?? []) {
+      const m = n.mediaRecommendation
+      if (!m || seen.has(m.id) || ownIds.has(m.id)) continue
+      seen.add(m.id)
+      out.push({
+        id: m.id, type: m.type, title: m.title, coverImage: m.coverImage,
+        siteUrl: m.siteUrl, averageScore: m.averageScore, year: m.startDate?.year ?? null,
+      })
+      if (out.length >= 12) break
+    }
+    recommendations.value = out
+    recsAnchorTitle.value = displayTitle(anchor.node.title)
+  } catch {
+    // 推薦は付加価値。失敗は黙って省略。
+  } finally {
+    if (my === recsSeq) recsLoading.value = false
   }
 }
 </script>
