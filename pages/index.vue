@@ -140,12 +140,20 @@
       </div>
     </section>
 
-    <!-- Works Section — directly after candidate list -->
+    <!-- Works Section -->
     <div v-if="selectedStaff" class="works-section">
-      <h2>
-        {{ selectedStaff.name.native || selectedStaff.name.full }} の作品
-        <span v-if="worksLoading" class="works-loading-indicator">読み込み中...</span>
-      </h2>
+      <div class="works-head">
+        <h2>
+          {{ selectedStaff.name.native || selectedStaff.name.full }} の作品
+          <span v-if="worksLoading" class="works-loading-indicator">読み込み中...</span>
+        </h2>
+        <button
+          v-if="!worksLoading && filteredWorks.length > 0"
+          type="button"
+          class="share-btn"
+          @click="shareOnX"
+        >X でシェア</button>
+      </div>
 
       <p v-if="worksError" class="status-error">{{ worksError }}</p>
       <p v-if="worksNotice" class="status-notice">{{ worksNotice }}</p>
@@ -229,6 +237,8 @@ import { toRomaji, toHiragana, toKatakana } from 'wanakana'
 
 // ── Config（R1: エンドポイントは runtimeConfig.public に一本化）─────────────
 const config = useRuntimeConfig()
+const route = useRoute()
+const router = useRouter()
 const ANILIST = config.public.anilistEndpoint as string
 const SITE_URL = ((config.public.siteUrl as string) || '').replace(/\/$/, '')
 const AFFILIATE_TAG = (config.public.affiliateTag as string) || ''
@@ -265,6 +275,16 @@ function isRateLimited(e: unknown): boolean {
   const err = e as { statusCode?: number; status?: number; response?: { status?: number } }
   const code = err?.statusCode ?? err?.status ?? err?.response?.status
   return code === 429
+}
+
+const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
+
+// 429 応答の Retry-After（秒）を読み、無ければ fallback を返す（上限 70s）
+function retryDelayMs(e: unknown, fallbackMs: number): number {
+  const ra = (e as { response?: { headers?: { get?: (k: string) => string | null } } })
+    ?.response?.headers?.get?.('retry-after')
+  const sec = ra ? parseInt(ra, 10) : NaN
+  return Number.isFinite(sec) && sec > 0 ? Math.min(sec * 1000 + 500, 70000) : fallbackMs
 }
 
 // 作品タイトルから購入導線（Amazon.co.jp 検索）を生成。タグが空なら中立リンク。
@@ -427,8 +447,33 @@ function onDocClick(e: MouseEvent) {
   const box = searchInputEl.value?.closest('.search-box')
   if (box && !box.contains(e.target as Node)) closeDropdown()
 }
-onMounted(() => document.addEventListener('click', onDocClick))
+
+// プログラムから検索欄を書き換える時、再検索 watch を1回だけ抑止する。
+// 値が変わらない時は何もしない（抑止フラグの漏れ＝次の入力が無視される事故を防ぐ）。
+function setQuerySilently(v: string) {
+  if (searchQuery.value === v) return
+  suppressNextWatch = true
+  searchQuery.value = v
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocClick)
+  // 共有 URL（?staff=ID）で直接開かれたら、その作者を読み込む
+  const id = parseInt(String(route.query.staff ?? ''), 10)
+  if (Number.isFinite(id)) selectStaffById(id)
+})
 onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
+
+// 戻る/進む（または ?staff=ID の変化）に追従する
+watch(() => route.query.staff, (val) => {
+  const id = parseInt(String(val ?? ''), 10)
+  if (Number.isFinite(id)) {
+    if (selectedStaff.value?.id !== id) selectStaffById(id)
+  } else if (selectedStaff.value) {
+    clearSelection()
+    setQuerySilently('')
+  }
+})
 
 // Query 1: Staff search (immediate — Enter / button)
 async function searchStaff() {
@@ -478,15 +523,22 @@ const SEARCH_QUERY = `
   }
 `
 
+// term 単位の検索結果キャッシュ（同じ語の再リクエストを避けてレート負荷を下げる）
+const staffSearchCache = new Map<string, StaffCandidate[]>()
+
 // 1 表記ぶんの検索。失敗しても [] を返してマージを止めない。
-// 429（レート上限）だけは握り潰さず呼び出し側へ伝える。
+// 429（レート上限）だけは握り潰さず呼び出し側へ伝える。成功結果はキャッシュする。
 async function fetchStaff(term: string): Promise<{ staff: StaffCandidate[]; rateLimited: boolean }> {
+  const cached = staffSearchCache.get(term)
+  if (cached) return { staff: cached, rateLimited: false }
   try {
     const data = await $fetch<{ data: { Page: { staff: StaffCandidate[] } } }>(ANILIST, {
       method: 'POST',
       body: { query: SEARCH_QUERY, variables: { s: term } }
     })
-    return { staff: data.data.Page.staff, rateLimited: false }
+    const staff = data.data.Page.staff
+    staffSearchCache.set(term, staff)
+    return { staff, rateLimited: false }
   } catch (e) {
     return { staff: [], rateLimited: isRateLimited(e) }
   }
@@ -584,49 +636,57 @@ async function executeSearch() {
 // 古い選択のレスポンスでバッジ/作品を上書きしないための連番
 let selectSeq = 0
 
-// Query 2: Works by selected staff
-async function selectStaff(staff: StaffCandidate) {
-  // 選んだ名前を入力欄に入れてドロップダウンを閉じる（再検索は抑止）
-  suppressNextWatch = true
-  searchQuery.value = staff.name.native || staff.name.full
-  closeDropdown()
-  const mySeq = ++selectSeq
-  selectedStaff.value = staff
+const WORKS_QUERY = `
+  query($id: Int) {
+    Staff(id: $id) {
+      name { full native }
+      staffMedia(type: MANGA, sort: START_DATE, perPage: 50) {
+        edges {
+          staffRole
+          node {
+            id
+            title { native romaji english }
+            startDate { year }
+            coverImage { medium }
+            siteUrl
+            relations { edges { relationType node { id type } } }
+          }
+        }
+      }
+    }
+  }
+`
+
+// 選択を解除して初期状態へ戻す（URL から ?staff が外れた＝戻る操作 等）
+function clearSelection() {
+  selectedStaff.value = null
+  filteredWorks.value = []
+  studioBadges.value = {}
+  expandedStudios.value = new Set()
+  worksError.value = ''
+  worksNotice.value = ''
+}
+
+// 作品＋スタジオバッジを読み込む（selectedStaff は呼び出し側で先にセット済み）
+async function loadWorks(id: number, mySeq: number) {
   filteredWorks.value = []
   studioBadges.value = {}
   expandedStudios.value = new Set()
   worksError.value = ''
   worksNotice.value = ''
   worksLoading.value = true
-
-  const query = `
-    query($id: Int) {
-      Staff(id: $id) {
-        name { full native }
-        staffMedia(type: MANGA, sort: START_DATE, perPage: 50) {
-          edges {
-            staffRole
-            node {
-              id
-              title { native romaji english }
-              startDate { year }
-              coverImage { medium }
-              siteUrl
-              relations { edges { relationType node { id type } } }
-            }
-          }
-        }
-      }
-    }
-  `
   try {
     const data = await $fetch<{
-      data: { Staff: { staffMedia: { edges: WorkEdge[] } } }
+      data: { Staff: { name: { full: string; native: string | null }; staffMedia: { edges: WorkEdge[] } } }
     }>(ANILIST, {
       method: 'POST',
-      body: { query, variables: { id: staff.id } }
+      body: { query: WORKS_QUERY, variables: { id } }
     })
     if (mySeq !== selectSeq) return
+    // works クエリも name を返す。?staff=ID 直アクセス（名前未確定）の時に確定させる。
+    if (selectedStaff.value?.id === id && data.data.Staff?.name) {
+      selectedStaff.value = { ...selectedStaff.value, name: data.data.Staff.name }
+    }
     const works = data.data.Staff.staffMedia.edges.filter(edge =>
       STAFF_ROLE_FILTER.some(role => edge.staffRole.includes(role))
     )
@@ -643,10 +703,46 @@ async function selectStaff(staff: StaffCandidate) {
   }
 }
 
+// 候補クリックから選択。共有のため URL に ?staff=ID を載せる（戻る/シェア対応）。
+async function selectStaff(staff: StaffCandidate) {
+  setQuerySilently(staff.name.native || staff.name.full)
+  closeDropdown()
+  const mySeq = ++selectSeq
+  selectedStaff.value = staff
+  if (String(route.query.staff ?? '') !== String(staff.id)) {
+    router.push({ query: { staff: String(staff.id) } })
+  }
+  await loadWorks(staff.id, mySeq)
+}
+
+// URL（?staff=ID）や戻る/進む操作から選択。名前は works クエリ応答で確定する。
+async function selectStaffById(id: number) {
+  const mySeq = ++selectSeq
+  selectedStaff.value = { id, name: { full: '', native: null }, primaryOccupations: [], favourites: null, image: null }
+  closeDropdown()
+  await loadWorks(id, mySeq)
+  if (selectedStaff.value?.id === id) {
+    setQuerySilently(selectedStaff.value.name.native || selectedStaff.value.name.full)
+  }
+}
+
+// X（旧 Twitter）へ現在の作者ページを共有する（Web Intent）
+function shareOnX() {
+  if (!selectedStaff.value) return
+  const name = selectedStaff.value.name.native || selectedStaff.value.name.full
+  const text = `「${name}」の作品とアニメ化スタジオ｜Creator Discovery`
+  const url = window.location.href
+  const intent = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`
+  window.open(intent, '_blank', 'noopener')
+}
+
 // ── Studio badges ───────────────────────────────────────────────────────────
 // AniList は relations 配下の studios をネスト取得すると 500 を返す（relation
 // ノード1つにつき1エラー＝既知の制約）。そこで2フェーズ目として、表示作品の
 // ADAPTATION→ANIME の media id を集め、その制作会社を id_in で一括取得する。
+// 429 自動リトライの待ち時間（ms・Retry-After が無い時の fallback）。要素数＝最大リトライ回数。
+const STUDIO_RETRY_FALLBACK = [20000, 40000]
+
 const STUDIO_QUERY = `
   query($ids: [Int]) {
     Page(perPage: 50) {
@@ -695,29 +791,43 @@ async function loadStudioBadges(works: WorkEdge[], mySeq: number) {
   }
   if (allAnimeIds.size === 0) return
 
-  try {
-    const studioByAnime = await fetchStudiosByAnime([...allAnimeIds])
-    if (mySeq !== selectSeq) return
-    const badges: Record<number, string[]> = {}
-    for (const [mangaId, animeIds] of animeIdsByManga) {
-      const counts = new Map<string, number>()
-      for (const aid of animeIds) {
-        for (const name of studioByAnime.get(aid) ?? []) {
-          counts.set(name, (counts.get(name) ?? 0) + 1)
+  // 429（レート上限）を踏んだら少し待って自動リトライ（最大2回・Retry-After 尊重）。
+  // グリッドは既に表示済みなので、バッジだけ後追いで埋める best-effort。
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const studioByAnime = await fetchStudiosByAnime([...allAnimeIds])
+      if (mySeq !== selectSeq) return
+      const badges: Record<number, string[]> = {}
+      for (const [mangaId, animeIds] of animeIdsByManga) {
+        const counts = new Map<string, number>()
+        for (const aid of animeIds) {
+          for (const name of studioByAnime.get(aid) ?? []) {
+            counts.set(name, (counts.get(name) ?? 0) + 1)
+          }
         }
+        // 劇場版などで複数社あるとき、最頻＝その作品の主たる制作会社を先頭に
+        const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([n]) => n)
+        if (sorted.length) badges[mangaId] = sorted
       }
-      // 劇場版などで複数社あるとき、最頻＝その作品の主たる制作会社を先頭に
-      const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([n]) => n)
-      if (sorted.length) badges[mangaId] = sorted
-    }
-    studioBadges.value = badges
-  } catch (e) {
-    if (mySeq !== selectSeq) return
-    // studio 取得失敗時はバッジ無しで継続（グリッドは保持）。
-    // 429 のときだけ、なぜバッジが出ないかを非ブロッキングで案内する。
-    if (isRateLimited(e)) {
-      worksNotice.value =
-        'アニメ化（制作会社）情報は AniList のレート上限のため省略しました。少し待つと表示されます。'
+      studioBadges.value = badges
+      worksNotice.value = '' // 取得できたら待機通知を消す
+      return
+    } catch (e) {
+      if (mySeq !== selectSeq) return
+      // 429 なら待ってリトライ（待っている間に別の作者を選んだら中止）
+      if (isRateLimited(e) && attempt < STUDIO_RETRY_FALLBACK.length) {
+        worksNotice.value =
+          'アニメ化（制作会社）情報は AniList のレート上限中です。自動で再取得します…'
+        await sleep(retryDelayMs(e, STUDIO_RETRY_FALLBACK[attempt]))
+        if (mySeq !== selectSeq) return
+        continue
+      }
+      // リトライ尽き or 429 以外 → バッジ無しで継続（グリッドは保持）
+      if (isRateLimited(e)) {
+        worksNotice.value =
+          'アニメ化（制作会社）情報は AniList のレート上限のため省略しました。少し待って選び直すと表示されます。'
+      }
+      return
     }
   }
 }
