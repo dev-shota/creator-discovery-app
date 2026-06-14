@@ -23,16 +23,27 @@
       </a>
     </header>
 
-    <!-- Hero（検索ファースト・左テキスト / 右ビジュアル） -->
-    <section class="hero">
+    <!-- Hero（検索ファースト・左テキスト / 右ビジュアル）。作り手/制作会社を選択して作品を
+         表示している間（is-compact）は、大ヒーロー画像・説明・コンセプト画像を畳んで検索バー
+         だけのコンパクトヘッダにする＝結果が装飾の下に押し込まれず、メイン画像も動かない
+         （ユーザー指摘「検索でメイン画像の位置が変わる」「作業中は装飾が邪魔」への対応）。 -->
+    <section class="hero" :class="{ 'is-compact': selectedStaff || selectedStudio }">
       <div class="hero-text">
         <span class="eyebrow">creator discovery</span>
         <h1 class="hero-title">
           作り手から、<span class="ac-pink">作品</span>、<br class="hero-br" />そして<span class="ac-teal">アニメ</span>へ。
         </h1>
+        <!-- 説明文は文節境界で折り返す（語の途中で割れない＝ユーザー要望 2026-06-15）。
+             中黒リストは CJK 既定で自然に折り返すが、動詞句「たどって見つける。」は auto-phrase でも
+             「た／どって」と割れた（Edge149 実測）ので inline-block の塊（.nb）にして割れを禁じる。 -->
         <p class="hero-sub">
-          <span class="hand">次に見る一本</span>を、好きな作者・監督・声優・制作会社からたどって見つける。
+          <span class="hand">次に見る一本</span>を、好きな作者・監督・声優・制作会社から<span class="nb">たどって見つける。</span>
         </p>
+        <!-- モバイル専用コンセプト画像（デスクトップは右の大ヒーロー画像 .hero-visual を使う）。
+             見出し・説明の下、検索ボックスの上に中央寄せで置く＝検索バーと結果の間に挟まらない。
+             「見出しの右に小さく」は窮屈でレイアウトが崩れる（ユーザー報告 2026-06-15）ため、
+             下に中央配置で意図的な hero イラストとして見せる。結果表示中は is-compact で畳む。 -->
+        <img class="hero-img-mini" src="/assets/hero-artist.png" alt="" aria-hidden="true" loading="lazy" />
 
         <!-- Search（ヒーローの主役アクション・候補は入力直下にドロップダウン） -->
         <div class="search-hero">
@@ -410,8 +421,18 @@
         </div>
       </template>
 
+      <!-- 取得中: スケルトンで領域を予約（全件取得→確定描画まで）。これで取得中もページ高さが
+           安定し、完了時に確定した並びを一発描画＝カードの並び替えリフローが起きない（issue 4）。 -->
+      <div v-if="worksLoading" class="works-grid works-skeleton" aria-hidden="true">
+        <div v-for="n in 12" :key="`skel-${n}`" class="skel-card">
+          <div class="skel-cover"></div>
+          <div class="skel-line"></div>
+          <div class="skel-line skel-line-short"></div>
+        </div>
+      </div>
+
       <!-- グリッド（フィルタ→ソート済み＝displayWorks） -->
-      <div v-if="displayWorks.length > 0" class="works-grid">
+      <div v-else-if="displayWorks.length > 0" class="works-grid">
         <div
           v-for="edge in displayWorks"
           :id="`work-${edge.node.id}`"
@@ -771,13 +792,33 @@ function isDirectorPerson(occ: string[]): boolean {
 function isVoicePerson(occ: string[]): boolean {
   return occ.some(o => o === 'Voice Actor')
 }
+// 脚本・原案モード（脚本家・シリーズ構成・キャラクター原案など）。実測 2026-06-15 の
+// occupation: 岡田麿里=['Scriptwriter']／虚淵玄=['Writer','Scriptwriter']／田中将賀=
+// ['Animator','Designer']／貞本義行=['Illustrator','Designer','Animator']／いとうのいぢ=
+// ['Illustrator','Designer']。脚本系は 'Scriptwriter'/'Writer'、キャラ原案系は
+// 'Designer'/'Illustrator'/'Character Design' で拾える。
+const CREATIVE_OCCUPATIONS = new Set([
+  'Scriptwriter', 'Writer', 'Series Composition', 'Character Design', 'Designer', 'Illustrator',
+])
+function isCreativeStaff(occ: string[]): boolean {
+  return occ.some(o => CREATIVE_OCCUPATIONS.has(o))
+}
 // creator=著者系のみ / director=監督系のみ / voice=声優のみ。occ 空（不明）は全モード残す。
 // 実測: 山田尚子=['Director','Storyboard Artist']→creator から除外・director で残す。
 // 尾田=['Mangaka']→creator で残す。花澤香菜=['Voice Actor']→voice で残す。
 function matchesSearchMode(occ: string[], mode: SearchMode): boolean {
+  // 声優モードだけは occ 空を救わない: けいおん等の劇中バンド（放課後ティータイム）の
+  // キャラが「楽曲名義の演者」として Staff 化され occ=[] で存在する（実測 2026-06-15:
+  // 平沢唯 id=230937 / 秋山澪 id=225915 = occ 空・fav 数十）。occ 空フォールバックで
+  // 声優候補に紛れ、選択すると characterMedia が空＝「出演作品がありません」になっていた。
+  // 声優は AniList でほぼ必ず 'Voice Actor' が付くので、声優モードは Voice Actor を必須に
+  // してキャラを除外する（アイドル/バンドもの全般で同型＝けいおん固有でない）。
+  if (mode === 'voice') return isVoicePerson(occ)
+  // 脚本・原案モードも occ 空を救わない（声優と同じ理由＝キャラ-スタッフ混入の防止。
+  // 脚本家・キャラ原案は AniList で職業がよく付いている＝取りこぼしは小さい）。
+  if (mode === 'creative') return isCreativeStaff(occ)
   if (occ.length === 0) return true
   if (mode === 'director') return isDirectorPerson(occ)
-  if (mode === 'voice') return isVoicePerson(occ)
   return isAuthorPerson(occ) // creator
 }
 
@@ -816,7 +857,7 @@ interface RecentItem {
   type?: string
 }
 // 「最近見た」はモードごとに別リスト（#1: 作者/作品/監督/声優/制作会社）。searchMode と同じキー。
-type RecentKind = 'creator' | 'title' | 'director' | 'voice' | 'studio'
+type RecentKind = 'creator' | 'title' | 'director' | 'voice' | 'creative' | 'studio'
 
 interface WorkEdge {
   staffRole: string
@@ -844,7 +885,7 @@ interface WorkEdge {
 const searchQuery = ref('')
 // 検索モード: 作者 / 作品名(逆引き) / 監督 / 声優 / 制作会社。creator・director・voice は同じ
 // staff(search) を叩き、候補を職業で出し分ける（AniList に役割別検索が無い）。
-type SearchMode = 'creator' | 'title' | 'director' | 'voice' | 'studio'
+type SearchMode = 'creator' | 'title' | 'director' | 'voice' | 'creative' | 'studio'
 const searchMode = ref<SearchMode>('creator')
 // 検索タブ。広い画面は横並びタブ、狭い画面は独自メニュー（mode-menu）に切替。
 const SEARCH_TABS: { mode: SearchMode; label: string }[] = [
@@ -852,6 +893,7 @@ const SEARCH_TABS: { mode: SearchMode; label: string }[] = [
   { mode: 'title', label: '作品名' },
   { mode: 'director', label: '監督' },
   { mode: 'voice', label: '声優' },
+  { mode: 'creative', label: '脚本・原案' },
   { mode: 'studio', label: '制作会社' },
 ]
 const staffCandidates = ref<StaffCandidate[]>([])
@@ -865,13 +907,17 @@ const selectedStaff = ref<StaffCandidate | null>(null)
 // 制作会社モードで選択中のスタジオ（works-section を出すもう一つのトリガ）
 const selectedStudio = ref<StudioCandidate | null>(null)
 // 最近見た（モード別・most-recent-first・id でユニーク・各上限8）。
-const recentByKind = ref<Record<RecentKind, RecentItem[]>>({ creator: [], title: [], director: [], voice: [], studio: [] })
+const recentByKind = ref<Record<RecentKind, RecentItem[]>>({ creator: [], title: [], director: [], voice: [], creative: [], studio: [] })
 const filteredWorks = ref<WorkEdge[]>([])
 // 選択中の作り手の作品が「作者作品」か「監督作品」か（見出しの出し分け＝検索タブと独立。
 // 作品名チューザから監督を選んだ場合も正しく「監督作品」見出しになる）。
 const selectedStaffKind = ref<'author' | 'director' | 'voice' | 'staffrole'>('author')
 // staffrole（脚本・構成 / キャラ原案）モードのときの見出しラベル（'脚本・構成' 等）。
 const selectedRoleLabel = ref('')
+// staffrole の roleKey（URL の view 種別に使う。writing=脚本・構成 / chardesign=キャラ原案 /
+// creative=脚本・原案タブの統合ビュー）。チューザ由来は writing/chardesign、検索タブ由来は creative。
+type RoleKey = 'writing' | 'chardesign' | 'creative'
+const selectedStaffRoleKey = ref<RoleKey | null>(null)
 // 作品グリッドの並び順（#4）。score=高評価 / pop=人気 / new=新しい / old=古い / hidden=隠れた名作。
 // 既定は高評価順（最終目標「どれを次に見ればいいか」に最も効く）。新しい選択ごとに既定へ戻す。
 type SortMode = 'score' | 'pop' | 'new' | 'old' | 'hidden'
@@ -991,11 +1037,13 @@ const CREATOR_PLACEHOLDER = '作者名（漢字・かな・ローマ字）　例
 const TITLE_PLACEHOLDER = '作品名（漫画・アニメ）　例: 進撃の巨人 / すずみや'
 const DIRECTOR_PLACEHOLDER = '監督名（漢字・かな・ローマ字）　例: 新海誠 / 山田尚子'
 const VOICE_PLACEHOLDER = '声優名（漢字・かな・ローマ字）　例: 花澤香菜 / はなざわ / hanazawa'
+const CREATIVE_PLACEHOLDER = '脚本家・キャラクター原案など　例: 岡田麿里 / 虚淵玄 / 貞本義行'
 const STUDIO_PLACEHOLDER = '制作会社（アニメスタジオ）　例: MAPPA / ufotable / 京都アニメーション'
 const searchPlaceholder = computed(() =>
   searchMode.value === 'title' ? TITLE_PLACEHOLDER
     : searchMode.value === 'director' ? DIRECTOR_PLACEHOLDER
     : searchMode.value === 'voice' ? VOICE_PLACEHOLDER
+    : searchMode.value === 'creative' ? CREATIVE_PLACEHOLDER
     : searchMode.value === 'studio' ? STUDIO_PLACEHOLDER
     : CREATOR_PLACEHOLDER
 )
@@ -1006,10 +1054,14 @@ const RECENT_LABELS: Record<RecentKind, string> = {
   title: '最近見た作品',
   director: '最近見た監督',
   voice: '最近見た声優',
+  creative: '最近見た脚本・原案',
   studio: '最近見た制作会社',
 }
 // 現在モードの recent リストとラベル（searchMode は RecentKind と同じ集合）。
-const currentRecent = computed<RecentItem[]>(() => recentByKind.value[searchMode.value])
+// null 安全: モードを足したのに recent 配線（recentByKind / RECENT_KEYS / loadAllRecent）を
+// 忘れると undefined.length で全体が白画面化する（実際に creative タブで踏んだ＝2026-06-15）。
+// 欠けても空リストへ畳んでアプリは生かす。
+const currentRecent = computed<RecentItem[]>(() => recentByKind.value[searchMode.value] ?? [])
 const recentLabel = computed(() => RECENT_LABELS[searchMode.value])
 
 // 入力が空でフォーカス中、かつ現モードの最近見たがあればドロップダウンに recent を出す。
@@ -1193,6 +1245,7 @@ const RECENT_KEYS: Record<RecentKind, string> = {
   title: 'cd_recent_title',
   director: 'cd_recent_director',
   voice: 'cd_recent_voice',
+  creative: 'cd_recent_creative',
   studio: 'cd_recent_studio',
 }
 const RECENT_CAP = 8
@@ -1222,6 +1275,7 @@ function loadAllRecent() {
     title: loadRecentKind('title'),
     director: loadRecentKind('director'),
     voice: loadRecentKind('voice'),
+    creative: loadRecentKind('creative'),
     studio: loadRecentKind('studio'),
   }
   if (!import.meta.client || typeof window === 'undefined') return
@@ -1378,32 +1432,77 @@ function cancelPendingSearch() {
   searchLoading.value = false
 }
 
+// ── URL 状態（全モード共有・リロード/戻る/直リンク復元）────────────────────────────
+// URL は ?view=<種別>&id=<数値> に統一する。種別の英語:
+//   creator(作者) / director(監督) / voice(声優) / writing(脚本・構成) /
+//   chardesign(キャラ原案) / creative(脚本・原案タブ) / studio(制作会社)
+// 旧 ?staff=ID（=作者）/ ?studio=ID も後方互換で読む（既存の共有リンクを壊さない）。
+type ViewKind = RoleKey | 'creator' | 'director' | 'voice' | 'studio'
+
+// 現在の選択を view 種別へ写像（復元の二重ロード判定に使う）。
+function currentViewKind(): ViewKind | '' {
+  if (selectedStudio.value) return 'studio'
+  if (!selectedStaff.value) return ''
+  const k = selectedStaffKind.value
+  if (k === 'director') return 'director'
+  if (k === 'voice') return 'voice'
+  if (k === 'staffrole') return selectedStaffRoleKey.value ?? 'writing'
+  return 'creator' // author
+}
+
+// 選択時に URL を載せる（各 load 関数から呼ぶ＝唯一の出口）。既に同じ view+id なら何もしない
+// ＝復元（URL→load）でこれが呼ばれても push し直さない＝ループ防止。
+function pushView(view: ViewKind, id: number) {
+  if (String(route.query.view ?? '') === view && String(route.query.id ?? '') === String(id)) return
+  router.push({ query: { view, id: String(id) } })
+}
+
+// URL（?view&id、無ければ旧 ?staff/?studio）から選択を復元。push はしない（各 load の
+// pushView がガード付きで担う）。onMounted・戻る/進む・直リンク・リロードで共通に使う。
+function restoreFromQuery() {
+  const q = route.query
+  let view = String(q.view ?? '') as ViewKind | ''
+  let id = parseInt(String(q.id ?? ''), 10)
+  if (!view) { // 後方互換: 旧 ?studio=ID（制作会社）/ ?staff=ID（作者）
+    const ls = parseInt(String(q.studio ?? ''), 10)
+    const lt = parseInt(String(q.staff ?? ''), 10)
+    if (Number.isFinite(ls)) { view = 'studio'; id = ls }
+    else if (Number.isFinite(lt)) { view = 'creator'; id = lt }
+  }
+  if (!view || !Number.isFinite(id)) {
+    // クエリが空 → 選択中なら解除（戻るで検索画面へ）
+    if (selectedStaff.value || selectedStudio.value) { clearSelection(); setQuerySilently('') }
+    return
+  }
+  // 既に同じビューを表示中なら何もしない（自分の push・戻る/進むの二重ロード防止）
+  const curId = selectedStudio.value?.id ?? selectedStaff.value?.id ?? null
+  if (curId === id && currentViewKind() === view) return
+  // タブのハイライトを URL に合わせる（検索欄/作品ロードは各 select* が処理）
+  searchMode.value =
+    view === 'studio' ? 'studio'
+      : view === 'director' ? 'director'
+        : view === 'voice' ? 'voice'
+          : view === 'creator' ? 'creator'
+            : 'creative' // writing / chardesign / creative はタブ「脚本・原案」に寄せる
+  if (view === 'studio') selectStudioById(id)
+  else if (view === 'director') selectDirectorById(id, '')
+  else if (view === 'voice') selectVoiceById(id, '')
+  else if (view === 'creator') selectStaffById(id)
+  else selectStaffRoleById(id, '', view as RoleKey) // writing | chardesign | creative
+}
+
 onMounted(() => {
   document.addEventListener('click', onDocClick)
   // 最近見た（全モード）＋「見た/読んだ」印を localStorage から復元（client のみ）
   loadAllRecent()
   loadSeen()
-  // 共有 URL で直接開かれたら復元（?studio を優先、無ければ ?staff）。
-  const studioId = parseInt(String(route.query.studio ?? ''), 10)
-  const staffId = parseInt(String(route.query.staff ?? ''), 10)
-  if (Number.isFinite(studioId)) selectStudioById(studioId)
-  else if (Number.isFinite(staffId)) selectStaffById(staffId)
+  // 共有 URL / リロードで直接開かれたら復元（全モード対応）。
+  restoreFromQuery()
 })
 onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
 
-// 戻る/進む（?staff / ?studio の変化）に追従する。
-watch(() => [route.query.staff, route.query.studio] as const, ([staffVal, studioVal]) => {
-  const studioId = parseInt(String(studioVal ?? ''), 10)
-  const staffId = parseInt(String(staffVal ?? ''), 10)
-  if (Number.isFinite(studioId)) {
-    if (selectedStudio.value?.id !== studioId) selectStudioById(studioId)
-  } else if (Number.isFinite(staffId)) {
-    if (selectedStaff.value?.id !== staffId) selectStaffById(staffId)
-  } else if (selectedStaff.value || selectedStudio.value) {
-    clearSelection()
-    setQuerySilently('')
-  }
-})
+// 戻る/進む・リロードで URL（?view/?id、旧 ?staff/?studio）が変わったら追従する。
+watch(() => [route.query.view, route.query.id, route.query.staff, route.query.studio], restoreFromQuery)
 
 // Query 1: Staff search (immediate — Enter / button)
 async function searchStaff() {
@@ -1838,7 +1937,7 @@ async function executeStudioSearch(q: string) {
   $posthog?.capture('search', { query: q, mode: searchMode.value, results: studioCandidates.value.length })
 }
 
-// 制作会社を選択 → 主要アニメを読み込む。共有のため URL に ?studio=ID を載せる。
+// 制作会社を選択 → 主要アニメを読み込む。URL（?view=studio&id=…）は loadStudioWorks 内の pushView が載せる。
 async function selectStudio(studio: StudioCandidate) {
   cancelPendingSearch()
   closeDropdown()
@@ -1849,9 +1948,6 @@ async function selectStudio(studio: StudioCandidate) {
   setQuerySilently(studio.name)
   saveRecent('studio', studio.id, studio.name) // 最近見た制作会社へ保存（#1）
   const mySeq = ++selectSeq
-  if (String(route.query.studio ?? '') !== String(studio.id)) {
-    router.push({ query: { studio: String(studio.id) } })
-  }
   $posthog?.capture('creator_viewed', { staff_id: studio.id, staff_name: studio.name, source: 'studio_search' })
   await loadStudioWorks(studio.id, mySeq)
 }
@@ -1861,6 +1957,7 @@ async function loadStudioWorks(id: number, mySeq: number) {
   studioBadges.value = {}
   expandedStudios.value = new Set()
   selectedStaffKind.value = 'author'
+  pushView('studio', id) // URL: ?view=studio&id=… （共有・リロード・戻る対応）
   worksCtl = {
     query: STUDIO_WORKS_QUERY,
     vars: { id },
@@ -1928,8 +2025,8 @@ function setSearchMode(mode: SearchMode) {
   searchLoading.value = false
   // 選択（作者/制作会社）と作品表示も全部リセット（古い結果が残らないように＝Codex#4）。
   clearSelection()
-  // URL から ?staff / ?studio を外す（再読込/戻るで古い選択が復活しないように＝Codex#3）。
-  if (route.query.staff != null || route.query.studio != null) {
+  // URL から ?view/?id（旧 ?staff/?studio も）を外す（再読込/戻るで古い選択が復活しないように＝Codex#3）。
+  if (route.query.view != null || route.query.id != null || route.query.staff != null || route.query.studio != null) {
     router.replace({ query: {} })
   }
   closeDropdown()
@@ -2041,15 +2138,18 @@ async function runWorksBatch(reset: boolean) {
       worksRaw.push(...page.items)
       worksCursor++
       pages++
-      worksLoadedCount.value = worksRaw.length
-      // 逐次表示: 取得済みぶんを transform して即グリッドへ反映（全件待たずに見え始める）。
+      worksLoadedCount.value = worksRaw.length // 進捗表示用（「読み込み中… N件」）
       if (ctl.seq !== selectSeq) return
-      filteredWorks.value = ctl.transform(worksRaw)
       if (!page.hasNextPage) { worksHasMore.value = false; break }
       // まだ続きがある。cap で抜けた場合だけ「さらに読み込む」を残す。
       worksHasMore.value = true
     }
     if (ctl.seq !== selectSeq) return
+    // 全ページを取り終えてから一度だけグリッドへ反映する。ページ毎に逐次反映すると、後発
+    // ページの高評価作がクライアント側ソートに割り込んで既表示カードを並び替え、「見ている
+    // 途中に配置が換わる」不快感を生む（多作な作者・制作会社で顕著＝ユーザー報告 2026-06-15）。
+    // 取得中はスケルトンで領域を予約し、確定した並びをここで一発描画する＝リフロー無し。
+    filteredWorks.value = ctl.transform(worksRaw)
     worksLoading.value = false
     worksLoadingMore.value = false
     // 全ページ取得後に1回だけ後処理（例: studio バッジの一括解決）。
@@ -2120,6 +2220,8 @@ async function loadWorks(id: number, mySeq: number) {
   studioBadges.value = {}
   expandedStudios.value = new Set()
   selectedStaffKind.value = 'author'
+  selectedStaffRoleKey.value = null
+  pushView('creator', id) // URL: ?view=creator&id=… （共有・リロード・戻る対応）
   worksCtl = {
     query: WORKS_QUERY,
     vars: { id },
@@ -2187,6 +2289,8 @@ async function loadDirectorWorks(id: number, mySeq: number) {
   studioBadges.value = {}
   expandedStudios.value = new Set()
   selectedStaffKind.value = 'director'
+  selectedStaffRoleKey.value = null
+  pushView('director', id) // URL: ?view=director&id=… （共有・リロード・戻る対応）
   worksCtl = {
     query: DIRECTOR_WORKS_QUERY,
     vars: { id },
@@ -2214,11 +2318,13 @@ async function loadDirectorWorks(id: number, mySeq: number) {
 // staffrole モード（#2/#3）: シリーズ構成/脚本/キャラ原案 で選ばれた人物の、その役割の
 // アニメ作品を表示する。監督作と同じ ANIME credits を全ページ引き、役割ファミリで絞る＝
 // クリック元のアニメ（けいおん・リズと青い鳥 等）もちゃんと出る。スタジオバッジは付けない。
-async function loadStaffRoleWorks(id: number, mySeq: number, roleKey: 'writing' | 'chardesign') {
+async function loadStaffRoleWorks(id: number, mySeq: number, roleKey: RoleKey) {
   studioBadges.value = {}
   expandedStudios.value = new Set()
   selectedStaffKind.value = 'staffrole'
+  selectedStaffRoleKey.value = roleKey
   selectedRoleLabel.value = STAFF_ROLE_FAMILIES[roleKey].label
+  pushView(roleKey, id) // URL: ?view=writing|chardesign|creative&id=… （共有・リロード・戻る対応）
   const re = STAFF_ROLE_FAMILIES[roleKey].match
   const label = STAFF_ROLE_FAMILIES[roleKey].label
   worksCtl = {
@@ -2281,6 +2387,8 @@ async function loadVoiceWorks(id: number, mySeq: number) {
   studioBadges.value = {}
   expandedStudios.value = new Set()
   selectedStaffKind.value = 'voice'
+  selectedStaffRoleKey.value = null
+  pushView('voice', id) // URL: ?view=voice&id=… （共有・リロード・戻る対応）
   worksCtl = {
     query: VOICE_WORKS_QUERY,
     vars: { id },
@@ -2360,18 +2468,21 @@ async function selectStaff(staff: StaffCandidate) {
     await loadDirectorWorks(staff.id, mySeq)
     return
   }
-  // 声優モード: その人物の出演作（アニメ）を表示。最近見た声優へ保存（URL は v1 で載せない）。
+  // 声優モード: その人物の出演作（アニメ）を表示。URL は load 関数の pushView が載せる。
   if (searchMode.value === 'voice') {
     saveRecent('voice', staff.id, name)
     $posthog?.capture('creator_viewed', { staff_id: staff.id, staff_name: name, source: 'voice_search' })
     await loadVoiceWorks(staff.id, mySeq)
     return
   }
-  // 作者モード: 共有のため URL に ?staff=ID を載せる（戻る/シェア対応）。
-  if (String(route.query.staff ?? '') !== String(staff.id)) {
-    router.push({ query: { staff: String(staff.id) } })
+  // 脚本・原案モード: その人物のアニメ参加作（脚本/構成・キャラ原案）を統合表示。
+  if (searchMode.value === 'creative') {
+    saveRecent('creative', staff.id, name)
+    $posthog?.capture('creator_viewed', { staff_id: staff.id, staff_name: name, source: 'creative_search' })
+    await loadStaffRoleWorks(staff.id, mySeq, 'creative')
+    return
   }
-  // 最近見た作者へ保存 ＋ analytics（作者検索由来）
+  // 作者モード。URL（?view=creator&id=…）は loadWorks 内の pushView が載せる。
   saveRecent('creator', staff.id, name)
   $posthog?.capture('creator_viewed', { staff_id: staff.id, staff_name: name, source: 'creator_search' })
   await loadWorks(staff.id, mySeq)
@@ -2419,9 +2530,12 @@ interface AuthorChoice {
 // staffrole（#2/#3）の役割ファミリ定義: 表示見出しと、アニメ credits から拾う staffRole 正規表現。
 // AniList の staffRole は話数注記が付く（例 "Script (eps 1, 2)" / "Series Composition Supervisor"）ので
 // 部分一致で拾う。Storyboard / Key Animation 等は意図的に含めない。
-const STAFF_ROLE_FAMILIES: Record<'writing' | 'chardesign', { label: string; match: RegExp }> = {
+const STAFF_ROLE_FAMILIES: Record<RoleKey, { label: string; match: RegExp }> = {
   writing: { label: '脚本・構成', match: /Series Composition|Script|Screenplay/ },
   chardesign: { label: 'キャラクター原案', match: /Character Design/ },
+  // creative=検索タブ「脚本・原案」の統合ビュー。脚本/構成とキャラ原案を1つにまとめて、
+  // その人物のアニメ参加作（脚本・キャラ原案）を横断表示する。
+  creative: { label: '脚本・原案', match: /Series Composition|Script|Screenplay|Character Design/ },
 }
 
 // AniList の英語ロールを日本語ラベルへ。AniList は role 文字列に前後の空白を含むことが
@@ -2570,9 +2684,7 @@ async function goToAuthor(id: number, name: { full: string; native: string | nul
   const mySeq = ++selectSeq
   selectedStaff.value = { id, name, primaryOccupations: [], favourites: null, image: null }
   const display = name.native || name.full
-  if (String(route.query.staff ?? '') !== String(id)) {
-    router.push({ query: { staff: String(id) } })
-  }
+  // URL（?view=creator&id=…）は loadWorks 内の pushView が載せる。
   // 作品モード由来なので「最近見た作品」は selectMediaToAuthor 側で保存済み（ここでは作者を recent に積まない＝リストをタブと1対1に保つ）。
   $posthog?.capture('creator_viewed', { staff_id: id, staff_name: display, source: 'title_search' })
   await loadWorks(id, mySeq)
@@ -2588,8 +2700,8 @@ async function selectDirectorById(id: number, name: string) {
   await loadDirectorWorks(id, mySeq)
 }
 
-// チューザから、staffrole（脚本・構成 / キャラ原案）作品を id で読み込む（#2/#3）。
-async function selectStaffRoleById(id: number, name: string, roleKey: 'writing' | 'chardesign') {
+// チューザ / 復元 / 脚本・原案タブから、staffrole 作品を id で読み込む（#2/#3）。
+async function selectStaffRoleById(id: number, name: string, roleKey: RoleKey) {
   selectedStudio.value = null
   mediaAuthorChoices.value = []
   closeDropdown()
@@ -2605,13 +2717,10 @@ async function selectRecent(r: RecentItem) {
   closeDropdown()
   const mode = searchMode.value
   // クリックで最前面へ並べ替え（各モードの list へ）
+  // URL（?view=…&id=…）は各 load 関数内の pushView が載せる（候補クリックと対称）。
   if (mode === 'studio') {
     saveRecent('studio', r.id, r.name)
     await selectStudioById(r.id)
-    // 共有/リロードできるよう URL に ?studio=ID を載せる（候補クリックと対称）。
-    if (String(route.query.studio ?? '') !== String(r.id)) {
-      router.push({ query: { studio: String(r.id) } })
-    }
     return
   }
   if (mode === 'director') {
@@ -2626,6 +2735,12 @@ async function selectRecent(r: RecentItem) {
     await selectVoiceById(r.id, r.name)
     return
   }
+  if (mode === 'creative') {
+    saveRecent('creative', r.id, r.name)
+    $posthog?.capture('creator_viewed', { staff_id: r.id, staff_name: r.name, source: 'recent' })
+    await selectStaffRoleById(r.id, r.name, 'creative')
+    return
+  }
   if (mode === 'title') {
     saveRecent('title', r.id, r.name, r.type)
     await resolveMediaToAuthor(r.id, r.type ?? 'MANGA', r.name)
@@ -2634,12 +2749,7 @@ async function selectRecent(r: RecentItem) {
   // creator
   saveRecent('creator', r.id, r.name)
   $posthog?.capture('creator_viewed', { staff_id: r.id, staff_name: r.name, source: 'recent' })
-  // selectStaffById が selectedStaff.id を即セットするので、続く ?staff push の watch は
-  // 同 id 判定で二重ロードしない。loadWorks も selectStaffById 内で1回だけ走る。
   await selectStaffById(r.id)
-  if (String(route.query.staff ?? '') !== String(r.id)) {
-    router.push({ query: { staff: String(r.id) } })
-  }
 }
 
 // URL（?staff=ID）や戻る/進む操作から選択。名前は works クエリ応答で確定する。

@@ -254,6 +254,34 @@ a {
   display: block;
 }
 
+/* デスクトップでは右の大ヒーロー画像（.hero-visual）を使うので、モバイル専用のコンセプト
+   画像（.hero-img-mini）は隠す。 */
+.hero-img-mini {
+  display: none;
+}
+
+/* 結果表示中（作り手/制作会社を選択中＝is-compact）はヒーローを畳んで検索バーだけのコンパクト
+   ヘッダにする。大ヒーロー画像・説明・コンセプト画像を隠し、見出しを小さくして余白を詰める＝
+   結果が装飾の下に押し込まれず、メイン画像が状態変化で上下に動くこともない（ユーザー指摘
+   「検索でメイン画像の位置が変わる」「作業中は画像が結果の邪魔」への対応 2026-06-15）。 */
+.hero.is-compact {
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+.hero.is-compact .hero-visual,
+.hero.is-compact .hero-img-mini,
+.hero.is-compact .eyebrow,
+.hero.is-compact .hero-sub {
+  display: none;
+}
+.hero.is-compact .hero-title {
+  font-size: 26px;
+  margin: 0 0 14px;
+}
+.hero.is-compact .hero-br {
+  display: none; /* コンパクト時は見出しを1行に収める */
+}
+
 @media (max-width: 860px) {
   .hero {
     flex-direction: column;
@@ -261,11 +289,23 @@ a {
     gap: 16px;
     margin-bottom: 24px;
   }
-  /* 装飾イラストはモバイルでは隠す。縦積みだと検索バーと結果/候補の間に挟まり、
-     検索のたびに大きな画像をスクロールで越える羽目になる＝UX 悪化（#1）。
-     aria-hidden の純装飾なので情報損失はゼロ。 */
+  /* 大ヒーロー画像（右カラム）はモバイルでは隠す。縦積みだと検索バーと結果/候補の間に
+     挟まり、検索のたびに大きな画像をスクロールで越える羽目になる＝UX 悪化。 */
   .hero-visual {
     display: none;
+  }
+  /* 代わりにコンセプト画像を見出し・説明の下、検索ボックスの上に中央寄せで出す。「見出しの
+     右に小さく」は窮屈でレイアウトが崩れる（ユーザー報告 2026-06-15）ため、下に意図的な
+     hero イラストとして中央配置する。検索バーより上なので検索と結果の間には挟まらない。 */
+  .hero-img-mini {
+    display: block;
+    margin: 6px auto 18px;
+    width: clamp(150px, 50vw, 210px);
+    height: auto;
+  }
+  /* 見出しが「作／品」のように語の途中で改行するのを防ぐ（CJK は既定でどこでも折り返す）。 */
+  .hero-title {
+    word-break: keep-all;
   }
 }
 
@@ -915,6 +955,64 @@ a {
   margin-top: 24px;
 }
 
+/* ── 取得中スケルトン（領域予約＝issue 4 のリフロー防止）。全件取得が終わるまでカードの代わりに
+   置き、ページ高さを安定させる。完了後に確定した並びを一発描画するので並び替えが起きない。 ── */
+.skel-card {
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: #fff;
+}
+.skel-cover {
+  aspect-ratio: 2 / 3;
+}
+.skel-cover,
+.skel-line {
+  background: linear-gradient(100deg, var(--bg-soft) 30%, #eceaf2 50%, var(--bg-soft) 70%);
+  background-size: 200% 100%;
+  animation: skel-shimmer 1.3s ease-in-out infinite;
+}
+.skel-line {
+  height: 11px;
+  margin: 14px 16px 0;
+  border-radius: 6px;
+}
+.skel-line-short {
+  width: 55%;
+  margin-bottom: 16px;
+}
+@keyframes skel-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skel-cover,
+  .skel-line { animation: none; }
+}
+
+/* 日本語の改行を文節境界で行う（説明文が語の途中で不自然に折り返すのを防ぐ＝ユーザー要望
+   2026-06-15）。word-break: auto-phrase は Chrome/Edge 119+ で言語解析し文節で改行する。
+   未対応の Safari/Firefox では normal にフォールバックするだけで害は無い（line-break: strict と
+   overflow-wrap は全ブラウザで効く）。完全なクロスブラウザ文節改行が要るなら BudouX 導入が次手。 */
+.hero-sub,
+.footer-attribution,
+.footer-disclosure,
+.how-desc,
+.status-notice,
+.status-empty,
+.resolve-notice,
+.works-notice {
+  word-break: auto-phrase;
+  overflow-wrap: break-word;
+  line-break: strict;
+}
+
+/* 文節を割らない塊。auto-phrase でも割れる動詞句などを inline-block でひとまとまりにし、
+   入りきらなければ語ごと次の行へ送る（全ブラウザで確実・依存なし）。 */
+.nb {
+  display: inline-block;
+}
+
 .work-card {
   background: #fff;
   border: 1px solid var(--line);
@@ -1409,11 +1507,24 @@ button.studio-badge {
   background: var(--ink);
   color: #fff;
 }
-.work-card.is-seen {
-  opacity: 0.55;
+/* 既見カードは控えめにする。ただし旧実装は card 全体を opacity:0.55 にして半透明化し、
+   背景の有機シェイプ（ブロブ）が透けて読みにくかった（ユーザー報告 2026-06-15）。
+   カバーをグレースケール＋淡色化し、タイトルを mute するだけにして、白いカード地
+   （#fff）は不透明のまま維持＝背景が透けない。淡色化はカード内（白地）に対して合成
+   されるので、背景色は出てこない。 */
+.work-card.is-seen .work-card-cover {
+  filter: grayscale(0.6);
+  opacity: 0.6;
 }
-.work-card.is-seen:hover {
+.work-card.is-seen .work-card-title {
+  color: var(--mute);
+}
+.work-card.is-seen:hover .work-card-cover {
+  filter: none;
   opacity: 1;
+}
+.work-card.is-seen:hover .work-card-title {
+  color: var(--ink);
 }
 .work-card.is-rep {
   border-color: var(--pink);
