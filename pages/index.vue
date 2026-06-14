@@ -34,21 +34,76 @@
           <span class="hand">次の“好き”</span>を、好きな作者からたどって見つける discovery ツール。
         </p>
 
-        <!-- Search（ヒーローの主役アクション） -->
+        <!-- Search（ヒーローの主役アクション・候補は入力直下にドロップダウン） -->
         <div class="search-hero">
-          <div class="search-row">
-            <input
-              v-model="searchQuery"
-              type="text"
-              class="search-input"
-              placeholder="スタッフ名（漢字・かな・ローマ字）　例: 井上雄彦 / いのうえ / inoue"
-              @keyup.enter="searchStaff"
-            />
-            <button class="search-btn" @click="searchStaff">検索</button>
-          </div>
+          <div class="search-box">
+            <div class="search-row">
+              <input
+                ref="searchInputEl"
+                :value="searchQuery"
+                type="text"
+                class="search-input"
+                placeholder="スタッフ名（漢字・かな・ローマ字）　例: 井上雄彦 / いのうえ / inoue"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-controls="staff-candidate-list"
+                :aria-expanded="dropdownOpen"
+                :aria-activedescendant="activeId"
+                autocomplete="off"
+                @input="onInput"
+                @keydown="onKeydown"
+                @focus="onFocus"
+              />
+              <button class="search-btn" @click="searchStaff">検索</button>
+            </div>
 
-          <!-- Search Error -->
-          <p v-if="searchError" class="status-error">{{ searchError }}</p>
+            <!-- 候補ドロップダウン（live 検索・入力直下にアンカー） -->
+            <ul
+              v-if="dropdownOpen"
+              id="staff-candidate-list"
+              class="candidate-list"
+              role="listbox"
+              aria-label="作り手の候補"
+            >
+              <li v-if="searchLoading" class="candidate-status">検索中…</li>
+              <li v-else-if="searchError" class="candidate-status is-error">{{ searchError }}</li>
+              <li v-else-if="staffCandidates.length === 0" class="candidate-status">
+                該当する作り手が見つかりませんでした。
+              </li>
+              <template v-else>
+                <li
+                  v-for="(staff, i) in staffCandidates"
+                  :id="`cand-${staff.id}`"
+                  :key="staff.id"
+                  class="candidate-item"
+                  role="option"
+                  :aria-selected="selectedStaff?.id === staff.id"
+                  :class="{ 'is-selected': selectedStaff?.id === staff.id, 'is-active': i === activeIndex }"
+                  @mouseenter="activeIndex = i"
+                  @mousedown.prevent
+                  @click="selectStaff(staff)"
+                >
+                  <img
+                    v-if="staff.image?.medium"
+                    class="candidate-avatar"
+                    :src="staff.image.medium"
+                    alt=""
+                    loading="lazy"
+                  />
+                  <span v-else class="candidate-avatar candidate-avatar-fallback" aria-hidden="true">
+                    {{ (staff.name.native || staff.name.full || '?').slice(0, 1) }}
+                  </span>
+                  <span class="candidate-name-native">{{ staff.name.native || staff.name.full }}</span>
+                  <span v-if="staff.name.native" class="candidate-name-full">
+                    ({{ staff.name.full }})
+                  </span>
+                  <span v-if="staff.primaryOccupations.length > 0" class="occupation-tag">
+                    {{ staff.primaryOccupations.map(o => OCCUPATION_MAP[o] ?? o).join('、') }}
+                  </span>
+                </li>
+              </template>
+            </ul>
+          </div>
         </div>
       </div>
 
@@ -57,25 +112,6 @@
         <img class="hero-img" src="/assets/hero-artist.png" alt="" />
       </div>
     </section>
-
-    <!-- Staff Candidate List — max-height scroll so works section is always visible -->
-    <ul v-if="staffCandidates.length > 0" class="candidate-list">
-      <li
-        v-for="staff in staffCandidates"
-        :key="staff.id"
-        class="candidate-item"
-        :class="{ 'is-selected': selectedStaff?.id === staff.id }"
-        @click="selectStaff(staff)"
-      >
-        <span class="candidate-name-native">{{ staff.name.native || staff.name.full }}</span>
-        <span v-if="staff.name.native" class="candidate-name-full">
-          ({{ staff.name.full }})
-        </span>
-        <span v-if="staff.primaryOccupations.length > 0" class="occupation-tag">
-          {{ staff.primaryOccupations.map(o => OCCUPATION_MAP[o] ?? o).join('、') }}
-        </span>
-      </li>
-    </ul>
 
     <!-- How it works（検索前のオンボーディング＝作り手→作品→スタジオ） -->
     <section v-if="!selectedStaff" class="how" aria-label="使い方">
@@ -269,6 +305,8 @@ interface StaffCandidate {
   id: number
   name: { full: string; native: string | null }
   primaryOccupations: string[]
+  favourites: number | null      // AniList のお気に入り数＝知名度の代理指標（ランキングの第1キー）
+  image: { medium: string | null } | null
 }
 
 interface WorkEdge {
@@ -308,6 +346,15 @@ function toggleStudios(id: number) {
 }
 
 const searchError = ref('')
+const searchLoading = ref(false)    // live 検索の実行中（ドロップダウンに「検索中」表示）
+const dropdownOpen = ref(false)     // 候補ドロップダウンの開閉
+const activeIndex = ref(-1)         // キーボードでハイライト中の候補 index（-1＝なし）
+const searchInputEl = ref<HTMLInputElement | null>(null)
+// aria-activedescendant 用: ハイライト中候補の DOM id
+const activeId = computed(() => {
+  const s = staffCandidates.value[activeIndex.value]
+  return s ? `cand-${s.id}` : undefined
+})
 const worksError = ref('')
 const worksNotice = ref('') // 非ブロッキングの案内（例: studio がレート上限で省略）
 const worksLoading = ref(false)
@@ -315,11 +362,73 @@ const worksLoading = ref(false)
 // Debounce state
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let requestSeq = 0
+let suppressNextWatch = false // selectStaff で入力欄を書き換えた時の再検索抑止
 
 // Helpers
 function displayTitle(title: WorkEdge['node']['title']) {
   return title.native || title.romaji || title.english || '(タイトル不明)'
 }
+
+// ── 候補ドロップダウン: 開閉・キーボード操作・外クリック ──────────────────────
+
+// v-model は IME 変換確定（Enter）まで値を同期しない＝「打っている途中」では候補が
+// 出なかった。input イベントを直接拾うことで、変換中（確定前）でも1文字ごとに
+// searchQuery を更新し、Google のように打っているそばから候補を出す。
+function onInput(e: Event) {
+  searchQuery.value = (e.target as HTMLInputElement).value
+}
+
+function closeDropdown() {
+  dropdownOpen.value = false
+  activeIndex.value = -1
+}
+
+// 入力欄に戻ってきた時、候補が残っていれば再表示する
+function onFocus() {
+  if (staffCandidates.value.length > 0 && searchQuery.value.trim().length >= 2) {
+    dropdownOpen.value = true
+  }
+}
+
+// 上下キーでハイライトを循環移動し、画面外なら見える位置へスクロール
+function moveActive(delta: number) {
+  const n = staffCandidates.value.length
+  if (!dropdownOpen.value || n === 0) return
+  activeIndex.value = (activeIndex.value + delta + n) % n
+  nextTick(() => {
+    const s = staffCandidates.value[activeIndex.value]
+    if (s) document.getElementById(`cand-${s.id}`)?.scrollIntoView({ block: 'nearest' })
+  })
+}
+
+// Enter: ハイライト中の候補があれば選択、無ければ検索を実行
+function onEnter() {
+  const s = staffCandidates.value[activeIndex.value]
+  if (dropdownOpen.value && s) {
+    selectStaff(s)
+    return
+  }
+  searchStaff()
+}
+
+// IME 変換中（isComposing）はキー操作を無視する＝変換確定の Enter で誤検索しない定石。
+function onKeydown(e: KeyboardEvent) {
+  if (e.isComposing) return
+  switch (e.key) {
+    case 'ArrowDown': e.preventDefault(); moveActive(1); break
+    case 'ArrowUp': e.preventDefault(); moveActive(-1); break
+    case 'Enter': e.preventDefault(); onEnter(); break
+    case 'Escape': closeDropdown(); break
+  }
+}
+
+// ドロップダウン外のクリックで閉じる（client-side のみ）
+function onDocClick(e: MouseEvent) {
+  const box = searchInputEl.value?.closest('.search-box')
+  if (box && !box.contains(e.target as Node)) closeDropdown()
+}
+onMounted(() => document.addEventListener('click', onDocClick))
+onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
 
 // Query 1: Staff search (immediate — Enter / button)
 async function searchStaff() {
@@ -332,13 +441,23 @@ async function searchStaff() {
 
 // Live search: debounced watch
 watch(searchQuery, (newVal) => {
-  if (debounceTimer !== null) clearTimeout(debounceTimer)
-  if (newVal.trim().length < 2) {
-    // 入力が短い場合は候補をクリアして終了
-    staffCandidates.value = []
-    searchError.value = ''
+  // selectStaff が入力欄に名前を入れた直後は再検索しない
+  if (suppressNextWatch) {
+    suppressNextWatch = false
     return
   }
+  if (debounceTimer !== null) clearTimeout(debounceTimer)
+  if (newVal.trim().length < 2) {
+    // 入力が短い場合は候補をクリアしてドロップダウンを閉じる
+    staffCandidates.value = []
+    searchError.value = ''
+    searchLoading.value = false
+    closeDropdown()
+    return
+  }
+  // 入力中はすぐドロップダウンを開いて「検索中」を見せる（体感速度）
+  dropdownOpen.value = true
+  searchLoading.value = true
   debounceTimer = setTimeout(() => {
     debounceTimer = null
     executeSearch()
@@ -352,6 +471,8 @@ const SEARCH_QUERY = `
         id
         name { full native }
         primaryOccupations
+        favourites
+        image { medium }
       }
     }
   }
@@ -374,6 +495,8 @@ async function fetchStaff(term: string): Promise<{ staff: StaffCandidate[]; rate
 async function executeSearch() {
   const q = searchQuery.value.trim()
   if (!q) return
+  dropdownOpen.value = true
+  searchLoading.value = true
 
   // 検索バリアント: AniList はかな→漢字も ひらがな↔カタカナ も変換しないので、
   // 複数表記を投げて id で統合する:
@@ -397,6 +520,8 @@ async function executeSearch() {
 
   // 古いレスポンスは捨てる
   if (mySeq !== requestSeq) return
+  searchLoading.value = false
+  activeIndex.value = -1
 
   const anyRateLimited = batches.some(b => b.rateLimited)
 
@@ -432,8 +557,14 @@ async function executeSearch() {
     return { c, idx, relevanceRank: prefixMatch ? 0 : 1 }
   })
 
-  // 安定ソート: 第1=occupationScore 昇順、第2=relevanceRank 昇順、第3=元 index
+  // 安定ソート: 第1=知名度（favourites 降順）、第2=occupationScore 昇順、
+  // 第3=relevanceRank 昇順、第4=元 index。
+  // favourites を最優先にするのが肝: AniList のかな検索は読みの前方一致で無名の人を
+  // 上位に出し、ユーザーが探している有名な作り手（尾田・新海・荒木…）を埋もれさせる。
+  // 知名度を第1キーにすると Google のように「有名な該当者が一番上」に揃う（実測検証済み）。
   withRank.sort((a, b) => {
+    const favDiff = (b.c.favourites ?? 0) - (a.c.favourites ?? 0)
+    if (favDiff !== 0) return favDiff
     const occDiff = occupationScore(a.c.primaryOccupations) - occupationScore(b.c.primaryOccupations)
     if (occDiff !== 0) return occDiff
     const relDiff = a.relevanceRank - b.relevanceRank
@@ -455,6 +586,10 @@ let selectSeq = 0
 
 // Query 2: Works by selected staff
 async function selectStaff(staff: StaffCandidate) {
+  // 選んだ名前を入力欄に入れてドロップダウンを閉じる（再検索は抑止）
+  suppressNextWatch = true
+  searchQuery.value = staff.name.native || staff.name.full
+  closeDropdown()
   const mySeq = ++selectSeq
   selectedStaff.value = staff
   filteredWorks.value = []
