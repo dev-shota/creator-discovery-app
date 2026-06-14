@@ -111,47 +111,53 @@ a {
   pointer-events: none;
 }
 
+/* 切り出し透過した素材を背景シェイプとして配置（contain で非歪み） */
 .blob {
   position: absolute;
-  border-radius: 50%;
-  filter: blur(2px);
-  opacity: 0.45;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
   will-change: transform;
   animation: float 8s ease-in-out infinite;
 }
 
+/* 大きめのコーナーシェイプ（上品: 淡くぼかして環境光のように） */
+.blob {
+  opacity: 0.26;
+  filter: blur(12px);
+}
 .blob.b1 {
   width: 300px;
   height: 300px;
-  left: -150px;
-  top: -140px;
-  background: radial-gradient(circle at 35% 35%, var(--pink-2), var(--pink));
+  left: -120px;
+  top: -120px;
+  background-image: url("/assets/cut/blob-pink-1.png");
   animation-duration: 9s;
 }
 .blob.b2 {
-  width: 240px;
-  height: 240px;
-  right: -70px;
-  top: 120px;
-  background: radial-gradient(circle at 35% 35%, var(--teal-2), var(--teal));
+  width: 250px;
+  height: 250px;
+  right: -90px;
+  top: 90px;
+  background-image: url("/assets/cut/blob-teal-1.png");
   animation-duration: 11s;
   animation-delay: -3s;
 }
 .blob.b3 {
-  width: 180px;
-  height: 180px;
-  left: 8%;
+  width: 210px;
+  height: 210px;
+  left: 5%;
   bottom: -50px;
-  background: radial-gradient(circle at 35% 35%, var(--yellow-2), var(--yellow));
+  background-image: url("/assets/cut/blob-yellow-2.png");
   animation-duration: 7s;
   animation-delay: -1s;
 }
 .blob.b4 {
-  width: 220px;
-  height: 220px;
-  right: 12%;
-  bottom: 40px;
-  background: radial-gradient(circle at 35% 35%, var(--purple), var(--purple-2));
+  width: 250px;
+  height: 250px;
+  right: 9%;
+  bottom: 30px;
+  background-image: url("/assets/cut/blob-purple-1.png");
   animation-duration: 10s;
   animation-delay: -4s;
 }
@@ -209,16 +215,64 @@ a {
   letter-spacing: 0.01em;
 }
 
-/* ── Hero ── */
+/* ── Hero（左テキスト / 右ビジュアル） ── */
 .hero {
+  display: flex;
+  align-items: center;
+  gap: 36px;
   margin-bottom: 44px;
+}
+
+.hero-text {
+  flex: 1 1 57%;
+  min-width: 0;
+}
+
+.hero-visual {
+  position: relative;
+  flex: 1 1 43%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 透過イラストを載せる柔らかいパステルの土台（意図的＝AI感を弱める枠） */
+.hero-visual::before {
+  content: "";
+  position: absolute;
+  inset: 6% 8%;
+  z-index: -1;
+  border-radius: 47% 53% 60% 40% / 52% 45% 55% 48%;
+  background: radial-gradient(circle at 38% 34%, var(--tint-lav), var(--tint-pink) 60%, var(--tint-mint));
+  filter: blur(2px);
+}
+
+.hero-img {
+  width: 100%;
+  max-width: 460px;
+  height: auto;
+  display: block;
+}
+
+@media (max-width: 860px) {
+  .hero {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 20px;
+  }
+  .hero-visual {
+    order: 2;
+  }
+  .hero-img {
+    max-width: 340px;
+  }
 }
 
 .hero-title {
   font-family: var(--font-round);
-  font-size: 60px;
+  font-size: 50px;
   font-weight: 800;
-  line-height: 1.16;
+  line-height: 1.18;
   letter-spacing: 0.01em;
   color: var(--ink);
   margin-top: 2px;
@@ -374,18 +428,20 @@ a {
   font-size: 17px;
   font-weight: 800;
   cursor: pointer;
-  box-shadow: 0 4px 0 rgba(157, 22, 86, 0.35);
-  transition: transform 0.1s, box-shadow 0.1s, background 0.15s;
+  box-shadow: 0 8px 20px rgba(237, 58, 140, 0.26);
+  transition: transform 0.12s, box-shadow 0.15s, background 0.15s;
   white-space: nowrap;
 }
 
 .search-btn:hover {
   background: var(--pink-2);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(237, 58, 140, 0.3);
 }
 
 .search-btn:active {
-  transform: translateY(3px);
-  box-shadow: 0 1px 0 rgba(157, 22, 86, 0.35);
+  transform: translateY(0);
+  box-shadow: 0 4px 12px rgba(237, 58, 140, 0.24);
 }
 
 /* ── Candidate list ── */
@@ -665,12 +721,17 @@ button.studio-badge {
     transform: rotate(90deg);
   }
 
-  /* 装飾シェイプはモバイルでは控えめに（崩れ・重さ防止） */
+  /* 装飾シェイプはモバイルでは控えめに（崩れ・重さ・テキスト干渉の防止） */
+  .blob.b2,
   .blob.b3,
   .blob.b4 {
     display: none;
   }
-  .blob {
+  .blob.b1 {
+    width: 200px;
+    height: 200px;
+    left: -90px;
+    top: -90px;
     opacity: 0.4;
   }
 }

@@ -1,6 +1,6 @@
 <template>
   <div class="page-container">
-    <!-- 背景の有機的シェイプ（ふわふわ浮く・装飾のみ） -->
+    <!-- 背景の有機的シェイプ（GPT image 2 生成素材を切り出し透過・ふわふわ浮く・装飾のみ） -->
     <div class="bg-decor" aria-hidden="true">
       <span class="blob b1"></span>
       <span class="blob b2"></span>
@@ -23,32 +23,40 @@
       </a>
     </header>
 
-    <!-- Hero（検索ファースト） -->
+    <!-- Hero（検索ファースト・左テキスト / 右ビジュアル） -->
     <section class="hero">
-      <span class="eyebrow">creator discovery</span>
-      <h1 class="hero-title">
-        作り手から、<span class="ac-pink">作品</span>、<br class="hero-br" />そして<span class="ac-teal">アニメ</span>へ。
-      </h1>
-      <p class="hero-sub">
-        <span class="hand">次の“好き”</span>を、好きな作者からたどって見つける discovery ツール。
-      </p>
+      <div class="hero-text">
+        <span class="eyebrow">creator discovery</span>
+        <h1 class="hero-title">
+          作り手から、<span class="ac-pink">作品</span>、<br class="hero-br" />そして<span class="ac-teal">アニメ</span>へ。
+        </h1>
+        <p class="hero-sub">
+          <span class="hand">次の“好き”</span>を、好きな作者からたどって見つける discovery ツール。
+        </p>
 
-      <!-- Search（ヒーローの主役アクション） -->
-      <div class="search-hero">
-        <div class="search-row">
-          <input
-            v-model="searchQuery"
-            type="text"
-            class="search-input"
-            placeholder="スタッフ名（漢字・かな・ローマ字）　例: 井上雄彦 / いのうえ / inoue"
-            @keyup.enter="searchStaff"
-          />
-          <button class="search-btn" @click="searchStaff">検索</button>
+        <!-- Search（ヒーローの主役アクション） -->
+        <div class="search-hero">
+          <div class="search-row">
+            <input
+              v-model="searchQuery"
+              type="text"
+              class="search-input"
+              placeholder="スタッフ名（漢字・かな・ローマ字）　例: 井上雄彦 / いのうえ / inoue"
+              @keyup.enter="searchStaff"
+            />
+            <button class="search-btn" @click="searchStaff">検索</button>
+          </div>
+
+          <!-- Search Error -->
+          <p v-if="searchError" class="status-error">{{ searchError }}</p>
         </div>
-
-        <!-- Search Error -->
-        <p v-if="searchError" class="status-error">{{ searchError }}</p>
       </div>
+
+      <!-- 右: ヒーローイラスト（GPT image 2 生成・作り手が作品を生む情景） -->
+      <div class="hero-visual" aria-hidden="true">
+        <img class="hero-img" src="/assets/hero-artist.png" alt="" />
+      </div>
+    </section>
 
     <!-- Staff Candidate List — max-height scroll so works section is always visible -->
     <ul v-if="staffCandidates.length > 0" class="candidate-list">
@@ -68,7 +76,6 @@
         </span>
       </li>
     </ul>
-    </section>
 
     <!-- How it works（検索前のオンボーディング＝作り手→作品→スタジオ） -->
     <section v-if="!selectedStaff" class="how" aria-label="使い方">

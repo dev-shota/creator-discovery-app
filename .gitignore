@@ -22,3 +22,6 @@ logs
 .DS_Store
 .idea
 .vscode
+
+# デザイン素材の作業元（GPT image 2 の生成物・切り出し元）はローカル保持・非追跡
+design-source/
