@@ -1,0 +1,11 @@
+{
+  // Cloudflare Workers (Static Assets) — このプロジェクトは Nuxt の `nuxt generate` で
+  // 生成した静的ファイル (.output/public) を配信するだけ。Worker スクリプト (main) は無い
+  // ＝ assets-only デプロイ。Cloudflare の新 Workers Builds フローが実行する
+  // `npx wrangler deploy` がこの設定を読み、.output/public をアップロードして公開 URL を発行する。
+  "name": "creator-discovery-app",
+  "compatibility_date": "2025-06-01",
+  "assets": {
+    "directory": "./.output/public"
+  }
+}
