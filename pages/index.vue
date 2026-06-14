@@ -36,6 +36,26 @@
 
         <!-- Search（ヒーローの主役アクション・候補は入力直下にドロップダウン） -->
         <div class="search-hero">
+          <!-- 検索モード切替（作者で探す / 作品名で探す）。作品名→作者の逆引き対応。 -->
+          <div class="search-mode" role="tablist" aria-label="検索モード">
+            <button
+              type="button"
+              class="mode-btn"
+              role="tab"
+              :aria-selected="searchMode === 'creator'"
+              :class="{ 'is-active': searchMode === 'creator' }"
+              @click="setSearchMode('creator')"
+            >作者で探す</button>
+            <button
+              type="button"
+              class="mode-btn"
+              role="tab"
+              :aria-selected="searchMode === 'title'"
+              :class="{ 'is-active': searchMode === 'title' }"
+              @click="setSearchMode('title')"
+            >作品名で探す</button>
+          </div>
+
           <div class="search-box">
             <div class="search-row">
               <input
@@ -43,7 +63,7 @@
                 :value="searchQuery"
                 type="text"
                 class="search-input"
-                placeholder="スタッフ名（漢字・かな・ローマ字）　例: 井上雄彦 / いのうえ / inoue"
+                :placeholder="searchPlaceholder"
                 role="combobox"
                 aria-autocomplete="list"
                 aria-controls="staff-candidate-list"
@@ -63,46 +83,113 @@
               id="staff-candidate-list"
               class="candidate-list"
               role="listbox"
-              aria-label="作り手の候補"
+              :aria-label="searchMode === 'title' ? '作品の候補' : '作り手の候補'"
             >
-              <li v-if="searchLoading" class="candidate-status">検索中…</li>
-              <li v-else-if="searchError" class="candidate-status is-error">{{ searchError }}</li>
-              <li v-else-if="staffCandidates.length === 0" class="candidate-status">
-                該当する作り手が見つかりませんでした。
-              </li>
-              <template v-else>
+              <!-- 入力が空でフォーカス中: 最近見た作者を出す（recent セクション） -->
+              <template v-if="showRecent">
+                <li class="candidate-section-label">最近見た作者</li>
                 <li
-                  v-for="(staff, i) in staffCandidates"
-                  :id="`cand-${staff.id}`"
-                  :key="staff.id"
+                  v-for="r in recentStaff"
+                  :key="`recent-${r.id}`"
                   class="candidate-item"
                   role="option"
-                  :aria-selected="selectedStaff?.id === staff.id"
-                  :class="{ 'is-selected': selectedStaff?.id === staff.id, 'is-active': i === activeIndex }"
-                  @mouseenter="activeIndex = i"
+                  :aria-selected="false"
                   @mousedown.prevent
-                  @click="selectStaff(staff)"
+                  @click="selectRecent(r)"
                 >
-                  <img
-                    v-if="staff.image?.medium"
-                    class="candidate-avatar"
-                    :src="staff.image.medium"
-                    alt=""
-                    loading="lazy"
-                  />
-                  <span v-else class="candidate-avatar candidate-avatar-fallback" aria-hidden="true">
-                    {{ (staff.name.native || staff.name.full || '?').slice(0, 1) }}
+                  <span class="candidate-avatar candidate-avatar-fallback" aria-hidden="true">
+                    {{ (r.name || '?').slice(0, 1) }}
                   </span>
-                  <span class="candidate-name-native">{{ staff.name.native || staff.name.full }}</span>
-                  <span v-if="staff.name.native" class="candidate-name-full">
-                    ({{ staff.name.full }})
-                  </span>
-                  <span v-if="staff.primaryOccupations.length > 0" class="occupation-tag">
-                    {{ staff.primaryOccupations.map(o => OCCUPATION_MAP[o] ?? o).join('、') }}
-                  </span>
+                  <span class="candidate-name-native">{{ r.name }}</span>
                 </li>
               </template>
+
+              <template v-else>
+                <li v-if="searchLoading" class="candidate-status">検索中…</li>
+                <li v-else-if="searchError" class="candidate-status is-error">{{ searchError }}</li>
+
+                <!-- 作品名モード: 作品候補 -->
+                <template v-else-if="searchMode === 'title'">
+                  <li v-if="mediaCandidates.length === 0" class="candidate-status">
+                    該当する作品が見つかりませんでした。
+                  </li>
+                  <li
+                    v-for="(media, i) in mediaCandidates"
+                    :id="`cand-${media.id}`"
+                    :key="media.id"
+                    class="candidate-item candidate-item-media"
+                    role="option"
+                    :aria-selected="false"
+                    :class="{ 'is-active': i === activeIndex }"
+                    @mouseenter="activeIndex = i"
+                    @mousedown.prevent
+                    @click="selectMediaToAuthor(media)"
+                  >
+                    <img
+                      v-if="media.coverImage?.medium"
+                      class="candidate-cover"
+                      :src="media.coverImage.medium"
+                      alt=""
+                      loading="lazy"
+                    />
+                    <span v-else class="candidate-cover candidate-cover-fallback" aria-hidden="true">?</span>
+                    <span class="candidate-media-main">
+                      <span class="candidate-name-native">{{ displayTitle(media.title) }}</span>
+                      <span class="candidate-media-meta">{{ mediaMeta(media) }}</span>
+                    </span>
+                  </li>
+                </template>
+
+                <!-- 作者モード: 既存のスタッフ候補（変更なし） -->
+                <template v-else>
+                  <li v-if="staffCandidates.length === 0" class="candidate-status">
+                    該当する作り手が見つかりませんでした。
+                  </li>
+                  <li
+                    v-for="(staff, i) in staffCandidates"
+                    :id="`cand-${staff.id}`"
+                    :key="staff.id"
+                    class="candidate-item"
+                    role="option"
+                    :aria-selected="selectedStaff?.id === staff.id"
+                    :class="{ 'is-selected': selectedStaff?.id === staff.id, 'is-active': i === activeIndex }"
+                    @mouseenter="activeIndex = i"
+                    @mousedown.prevent
+                    @click="selectStaff(staff)"
+                  >
+                    <img
+                      v-if="staff.image?.medium"
+                      class="candidate-avatar"
+                      :src="staff.image.medium"
+                      alt=""
+                      loading="lazy"
+                    />
+                    <span v-else class="candidate-avatar candidate-avatar-fallback" aria-hidden="true">
+                      {{ (staff.name.native || staff.name.full || '?').slice(0, 1) }}
+                    </span>
+                    <span class="candidate-name-native">{{ staff.name.native || staff.name.full }}</span>
+                    <span v-if="staff.name.native" class="candidate-name-full">
+                      ({{ staff.name.full }})
+                    </span>
+                    <span v-if="staff.primaryOccupations.length > 0" class="occupation-tag">
+                      {{ staff.primaryOccupations.map(o => OCCUPATION_MAP[o] ?? o).join('、') }}
+                    </span>
+                  </li>
+                </template>
+              </template>
             </ul>
+          </div>
+
+          <!-- 最近見た作者チップ（検索前のヒーロー下。控えめ・非ブロッキング） -->
+          <div v-if="!selectedStaff && recentStaff.length > 0" class="recent-chips" aria-label="最近見た作者">
+            <span class="recent-chips-label">最近見た作者</span>
+            <button
+              v-for="r in recentStaff"
+              :key="`chip-${r.id}`"
+              type="button"
+              class="recent-chip"
+              @click="selectRecent(r)"
+            >{{ r.name }}</button>
           </div>
         </div>
       </div>
@@ -239,6 +326,9 @@ import { toRomaji, toHiragana, toKatakana } from 'wanakana'
 const config = useRuntimeConfig()
 const route = useRoute()
 const router = useRouter()
+// PostHog（plugins/posthog.client.ts が provide）。key 未設定なら provide されず
+// $posthog は undefined ＝ optional-chaining で全 capture が no-op になる。
+const { $posthog } = useNuxtApp() as any
 const ANILIST = config.public.anilistEndpoint as string
 const SITE_URL = ((config.public.siteUrl as string) || '').replace(/\/$/, '')
 const AFFILIATE_TAG = (config.public.affiliateTag as string) || ''
@@ -329,6 +419,22 @@ interface StaffCandidate {
   image: { medium: string | null } | null
 }
 
+// 作品名（逆引き）モードの候補。漫画・アニメ両方を含む。
+interface MediaCandidate {
+  id: number
+  type: string                   // MANGA / ANIME
+  format: string | null          // TV / MANGA / MOVIE 等
+  startDate: { year: number | null } | null
+  title: { native: string | null; romaji: string | null; english: string | null }
+  coverImage: { medium: string | null } | null
+}
+
+// localStorage に保存する最近見た作者の最小形
+interface RecentStaff {
+  id: number
+  name: string
+}
+
 interface WorkEdge {
   staffRole: string
   node: {
@@ -345,8 +451,13 @@ interface WorkEdge {
 
 // State
 const searchQuery = ref('')
+// 検索モード: 作者で探す（既定）/ 作品名で探す（逆引き）
+const searchMode = ref<'creator' | 'title'>('creator')
 const staffCandidates = ref<StaffCandidate[]>([])
+const mediaCandidates = ref<MediaCandidate[]>([])   // 作品名モードの候補
 const selectedStaff = ref<StaffCandidate | null>(null)
+// 最近見た作者（localStorage `cd_recent`・most-recent-first・id でユニーク・上限8）
+const recentStaff = ref<RecentStaff[]>([])
 const filteredWorks = ref<WorkEdge[]>([])
 // manga node id → アニメ化した制作会社名（頻度順）
 const studioBadges = ref<Record<number, string[]>>({})
@@ -370,10 +481,12 @@ const searchLoading = ref(false)    // live 検索の実行中（ドロップダ
 const dropdownOpen = ref(false)     // 候補ドロップダウンの開閉
 const activeIndex = ref(-1)         // キーボードでハイライト中の候補 index（-1＝なし）
 const searchInputEl = ref<HTMLInputElement | null>(null)
-// aria-activedescendant 用: ハイライト中候補の DOM id
+// aria-activedescendant 用: ハイライト中候補の DOM id（モード対応）
 const activeId = computed(() => {
-  const s = staffCandidates.value[activeIndex.value]
-  return s ? `cand-${s.id}` : undefined
+  const item = searchMode.value === 'title'
+    ? mediaCandidates.value[activeIndex.value]
+    : staffCandidates.value[activeIndex.value]
+  return item ? `cand-${item.id}` : undefined
 })
 const worksError = ref('')
 const worksNotice = ref('') // 非ブロッキングの案内（例: studio がレート上限で省略）
@@ -385,8 +498,63 @@ let requestSeq = 0
 let suppressNextWatch = false // selectStaff で入力欄を書き換えた時の再検索抑止
 
 // Helpers
-function displayTitle(title: WorkEdge['node']['title']) {
+function displayTitle(title: { native: string | null; romaji: string | null; english: string | null }) {
   return title.native || title.romaji || title.english || '(タイトル不明)'
+}
+
+// 検索欄のプレースホルダ（モードで切替）
+const CREATOR_PLACEHOLDER = 'スタッフ名（漢字・かな・ローマ字）　例: 井上雄彦 / いのうえ / inoue'
+const TITLE_PLACEHOLDER = '作品名（漫画・アニメ）　例: 進撃の巨人 / チェンソーマン'
+const searchPlaceholder = computed(() =>
+  searchMode.value === 'title' ? TITLE_PLACEHOLDER : CREATOR_PLACEHOLDER
+)
+
+// 入力が空でフォーカス中、かつ最近見た作者があればドロップダウンに recent を出す
+const showRecent = computed(() =>
+  dropdownOpen.value && searchQuery.value.trim().length === 0 && recentStaff.value.length > 0
+)
+
+// 作品候補の補助タグ（種別・フォーマット・年）。例「アニメ・TV・2013」
+const MEDIA_TYPE_MAP: Record<string, string> = { MANGA: '漫画', ANIME: 'アニメ' }
+function mediaMeta(media: MediaCandidate): string {
+  const parts: string[] = []
+  parts.push(MEDIA_TYPE_MAP[media.type] ?? media.type)
+  if (media.format && media.format !== media.type) parts.push(media.format)
+  if (media.startDate?.year) parts.push(String(media.startDate.year))
+  return parts.join('・')
+}
+
+// ── 最近見た作者（localStorage・SSR 安全）─────────────────────────────────────
+const RECENT_KEY = 'cd_recent'
+const RECENT_CAP = 8
+
+// localStorage から読む（client のみ・try/catch で常に安全に [] へフォールバック）
+function loadRecent(): RecentStaff[] {
+  if (!import.meta.client || typeof window === 'undefined') return []
+  try {
+    const raw = window.localStorage.getItem(RECENT_KEY)
+    if (!raw) return []
+    const arr = JSON.parse(raw)
+    if (!Array.isArray(arr)) return []
+    return arr
+      .filter((x: any) => x && typeof x.id === 'number' && typeof x.name === 'string')
+      .slice(0, RECENT_CAP)
+  } catch {
+    return []
+  }
+}
+
+// 作者を最近見たリストへ追加（most-recent-first・id で dedup・上限8・永続化）
+function saveRecent(id: number, name: string) {
+  if (!import.meta.client || typeof window === 'undefined') return
+  if (!Number.isFinite(id) || !name) return
+  const next = [{ id, name }, ...recentStaff.value.filter(r => r.id !== id)].slice(0, RECENT_CAP)
+  recentStaff.value = next
+  try {
+    window.localStorage.setItem(RECENT_KEY, JSON.stringify(next))
+  } catch {
+    // quota 超過・プライベートモード等は黙って無視（機能は劣化させない）
+  }
 }
 
 // ── 候補ドロップダウン: 開閉・キーボード操作・外クリック ──────────────────────
@@ -403,26 +571,47 @@ function closeDropdown() {
   activeIndex.value = -1
 }
 
-// 入力欄に戻ってきた時、候補が残っていれば再表示する
+// 入力欄に戻ってきた時、候補が残っていれば再表示する。
+// 入力が空でも「最近見た作者」があればドロップダウンを開いて recent を見せる。
 function onFocus() {
-  if (staffCandidates.value.length > 0 && searchQuery.value.trim().length >= 2) {
+  const len = searchQuery.value.trim().length
+  if (len === 0 && recentStaff.value.length > 0) {
+    dropdownOpen.value = true
+    return
+  }
+  const candCount = searchMode.value === 'title'
+    ? mediaCandidates.value.length
+    : staffCandidates.value.length
+  if (candCount > 0 && len >= 2) {
     dropdownOpen.value = true
   }
 }
 
 // 上下キーでハイライトを循環移動し、画面外なら見える位置へスクロール
 function moveActive(delta: number) {
-  const n = staffCandidates.value.length
+  const list: { id: number }[] = searchMode.value === 'title'
+    ? mediaCandidates.value
+    : staffCandidates.value
+  const n = list.length
   if (!dropdownOpen.value || n === 0) return
   activeIndex.value = (activeIndex.value + delta + n) % n
   nextTick(() => {
-    const s = staffCandidates.value[activeIndex.value]
-    if (s) document.getElementById(`cand-${s.id}`)?.scrollIntoView({ block: 'nearest' })
+    const item = list[activeIndex.value]
+    if (item) document.getElementById(`cand-${item.id}`)?.scrollIntoView({ block: 'nearest' })
   })
 }
 
 // Enter: ハイライト中の候補があれば選択、無ければ検索を実行
 function onEnter() {
+  if (searchMode.value === 'title') {
+    const m = mediaCandidates.value[activeIndex.value]
+    if (dropdownOpen.value && m) {
+      selectMediaToAuthor(m)
+      return
+    }
+    searchStaff()
+    return
+  }
   const s = staffCandidates.value[activeIndex.value]
   if (dropdownOpen.value && s) {
     selectStaff(s)
@@ -458,6 +647,8 @@ function setQuerySilently(v: string) {
 
 onMounted(() => {
   document.addEventListener('click', onDocClick)
+  // 最近見た作者を localStorage から復元（client のみ）
+  recentStaff.value = loadRecent()
   // 共有 URL（?staff=ID）で直接開かれたら、その作者を読み込む
   const id = parseInt(String(route.query.staff ?? ''), 10)
   if (Number.isFinite(id)) selectStaffById(id)
@@ -493,11 +684,18 @@ watch(searchQuery, (newVal) => {
   }
   if (debounceTimer !== null) clearTimeout(debounceTimer)
   if (newVal.trim().length < 2) {
-    // 入力が短い場合は候補をクリアしてドロップダウンを閉じる
+    // 入力が短い場合は候補をクリア。空なら recent を見せるためドロップダウンは
+    // 開いたままにし、それ以外（1文字）は閉じる。
     staffCandidates.value = []
+    mediaCandidates.value = []
     searchError.value = ''
     searchLoading.value = false
-    closeDropdown()
+    if (newVal.trim().length === 0 && recentStaff.value.length > 0) {
+      dropdownOpen.value = true
+      activeIndex.value = -1
+    } else {
+      closeDropdown()
+    }
     return
   }
   // 入力中はすぐドロップダウンを開いて「検索中」を見せる（体感速度）
@@ -518,6 +716,18 @@ const SEARCH_QUERY = `
         primaryOccupations
         favourites
         image { medium }
+      }
+    }
+  }
+`
+
+// 作品名（逆引き）モードの検索。type フィルタ無し＝漫画もアニメも出す。
+const TITLE_SEARCH_QUERY = `
+  query($s: String) {
+    Page(perPage: 20) {
+      media(search: $s, sort: [SEARCH_MATCH, POPULARITY_DESC]) {
+        id type format startDate { year }
+        title { native romaji english } coverImage { medium }
       }
     }
   }
@@ -547,6 +757,11 @@ async function fetchStaff(term: string): Promise<{ staff: StaffCandidate[]; rate
 async function executeSearch() {
   const q = searchQuery.value.trim()
   if (!q) return
+  // 作品名モードは別パス（逆引き）。作者モードは下の既存ロジック。
+  if (searchMode.value === 'title') {
+    await executeTitleSearch(q)
+    return
+  }
   dropdownOpen.value = true
   searchLoading.value = true
 
@@ -631,6 +846,58 @@ async function executeSearch() {
     // 全表記が 429 で空なら「見つからない」ではなくレート上限を案内する
     searchError.value = anyRateLimited ? RATE_LIMIT_MSG : '候補が見つかりませんでした。'
   }
+
+  // analytics: 検索イベント（作者モードの結果件数）
+  $posthog?.capture('search', { query: q, mode: searchMode.value, results: staffCandidates.value.length })
+}
+
+// 作品名（逆引き）モードの検索本体。候補は同じドロップダウンに別レイアウトで出す。
+async function executeTitleSearch(q: string) {
+  dropdownOpen.value = true
+  searchLoading.value = true
+  searchError.value = ''
+  staffCandidates.value = []
+  mediaCandidates.value = []
+  selectedStaff.value = null
+  filteredWorks.value = []
+
+  // stale レスポンス対策（作者検索と連番を共有）
+  const mySeq = ++requestSeq
+  try {
+    const data = await $fetch<{ data: { Page: { media: MediaCandidate[] } } }>(ANILIST, {
+      method: 'POST',
+      body: { query: TITLE_SEARCH_QUERY, variables: { s: q } }
+    })
+    if (mySeq !== requestSeq) return
+    searchLoading.value = false
+    activeIndex.value = -1
+    mediaCandidates.value = data.data.Page.media ?? []
+  } catch (e) {
+    if (mySeq !== requestSeq) return
+    searchLoading.value = false
+    activeIndex.value = -1
+    mediaCandidates.value = []
+    if (isRateLimited(e)) searchError.value = RATE_LIMIT_MSG
+  }
+
+  // analytics: 検索イベント（作品名モードの結果件数）
+  $posthog?.capture('search', { query: q, mode: searchMode.value, results: mediaCandidates.value.length })
+}
+
+// 検索モードを切り替える。候補・選択をクリアし、入力もリセットする。
+function setSearchMode(mode: 'creator' | 'title') {
+  if (searchMode.value === mode) return
+  searchMode.value = mode
+  if (debounceTimer !== null) {
+    clearTimeout(debounceTimer)
+    debounceTimer = null
+  }
+  staffCandidates.value = []
+  mediaCandidates.value = []
+  searchError.value = ''
+  searchLoading.value = false
+  closeDropdown()
+  setQuerySilently('')
 }
 
 // 古い選択のレスポンスでバッジ/作品を上書きしないための連番
@@ -705,14 +972,107 @@ async function loadWorks(id: number, mySeq: number) {
 
 // 候補クリックから選択。共有のため URL に ?staff=ID を載せる（戻る/シェア対応）。
 async function selectStaff(staff: StaffCandidate) {
-  setQuerySilently(staff.name.native || staff.name.full)
+  const name = staff.name.native || staff.name.full
+  setQuerySilently(name)
   closeDropdown()
   const mySeq = ++selectSeq
   selectedStaff.value = staff
   if (String(route.query.staff ?? '') !== String(staff.id)) {
     router.push({ query: { staff: String(staff.id) } })
   }
+  // 最近見た作者へ保存 ＋ analytics（作者検索由来）
+  saveRecent(staff.id, name)
+  $posthog?.capture('creator_viewed', { staff_id: staff.id, staff_name: name, source: 'creator_search' })
   await loadWorks(staff.id, mySeq)
+}
+
+// 作品名（逆引き）モードの構成. Media の staff から「作者」を解決する。
+// アニメ→原作者、漫画→漫画家。優先ロールの並び順で最初に当たったものを採用。
+const MEDIA_STAFF_QUERY = `
+  query($id: Int) {
+    Media(id: $id) {
+      staff(sort: [RELEVANCE]) {
+        edges { role node { id name { full native } } }
+      }
+    }
+  }
+`
+
+// 作者と見なすロール（優先度順）。role 文字列にこのいずれかが含まれる最初の edge を採る。
+const AUTHOR_ROLE_PRIORITY = [
+  'Story & Art', 'Story', 'Original Creator', 'Original Story', 'Art', 'Original Concept',
+]
+
+interface MediaStaffEdge {
+  role: string
+  node: { id: number; name: { full: string; native: string | null } }
+}
+
+// 作品候補をクリック→その作者を解決し、既存の loadWorks パイプラインへ流す
+// （?staff=ID push でディープリンク/戻る/スタジオバッジが全部そのまま効く）。
+async function selectMediaToAuthor(media: MediaCandidate) {
+  closeDropdown()
+  searchError.value = ''
+  try {
+    const data = await $fetch<{ data: { Media: { staff: { edges: MediaStaffEdge[] } } } }>(ANILIST, {
+      method: 'POST',
+      body: { query: MEDIA_STAFF_QUERY, variables: { id: media.id } }
+    })
+    const edges = data.data.Media?.staff?.edges ?? []
+    if (edges.length === 0) {
+      worksNotice.value = 'この作品の作者情報が取得できませんでした。'
+      selectedStaff.value = null
+      return
+    }
+    // 優先ロールで最初に当たった作者。無ければ先頭の staff にフォールバック。
+    let chosen: MediaStaffEdge | undefined
+    for (const role of AUTHOR_ROLE_PRIORITY) {
+      chosen = edges.find(e => e.role && e.role.includes(role))
+      if (chosen) break
+    }
+    if (!chosen) chosen = edges[0]
+    const authorId = chosen.node.id
+    const name = chosen.node.name.native || chosen.node.name.full
+
+    const mySeq = ++selectSeq
+    selectedStaff.value = {
+      id: authorId,
+      name: chosen.node.name,
+      primaryOccupations: [],
+      favourites: null,
+      image: null
+    }
+    setQuerySilently(name)
+    if (String(route.query.staff ?? '') !== String(authorId)) {
+      router.push({ query: { staff: String(authorId) } })
+    }
+    // 最近見た作者へ保存 ＋ analytics（作品名検索由来）
+    saveRecent(authorId, name)
+    $posthog?.capture('creator_viewed', { staff_id: authorId, staff_name: name, source: 'title_search' })
+    await loadWorks(authorId, mySeq)
+  } catch (e) {
+    if (isRateLimited(e)) {
+      worksNotice.value = RATE_LIMIT_MSG
+    } else {
+      worksNotice.value = '作者の解決中にエラーが発生しました。少し待ってから再試行してください。'
+    }
+    selectedStaff.value = null
+  }
+}
+
+// 最近見た作者チップ/行のクリック → selectStaffById(id) で読み込み（名前は確定済み）。
+async function selectRecent(r: RecentStaff) {
+  setQuerySilently(r.name)
+  closeDropdown()
+  // analytics（最近見た作者由来）
+  $posthog?.capture('creator_viewed', { staff_id: r.id, staff_name: r.name, source: 'recent' })
+  saveRecent(r.id, r.name) // クリックで最前面へ並べ替え
+  // selectStaffById が selectedStaff.id を即セットするので、続く ?staff push の watch は
+  // 同 id 判定で二重ロードしない。loadWorks も selectStaffById 内で1回だけ走る。
+  await selectStaffById(r.id)
+  if (String(route.query.staff ?? '') !== String(r.id)) {
+    router.push({ query: { staff: String(r.id) } })
+  }
 }
 
 // URL（?staff=ID）や戻る/進む操作から選択。名前は works クエリ応答で確定する。

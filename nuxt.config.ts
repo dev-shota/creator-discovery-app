@@ -48,7 +48,10 @@ export default defineNuxtConfig({
       // アフィリエイトの構造的シーム（R4）。空＝中立（タグ無し・コミッション無し）。
       // 有効化は RED（外向き・不可逆）: Amazon アソシエイト承認後に
       // NUXT_PUBLIC_AFFILIATE_TAG=yourtag-22 を generate 環境に設定するだけ。
-      affiliateTag: ''
+      affiliateTag: '',
+      // PostHog アナリティクス。空=無効、NUXT_PUBLIC_POSTHOG_KEY/_HOST で generate 時に注入、ハードコード禁止。
+      posthogKey: '',
+      posthogHost: 'https://us.i.posthog.com'
     }
   }
 })
