@@ -1731,3 +1731,81 @@ button.studio-badge {
     align-items: flex-start;
   }
 }
+
+/* ── Collaborators（よく組むクリエイター/制作会社）── */
+.collabs-section {
+  margin-top: 40px;
+}
+.collabs-section > div + div {
+  margin-top: 24px;
+}
+.collabs-title {
+  font-family: var(--font-round);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+.collabs-rail {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+.collabs-rail::-webkit-scrollbar { height: 4px; }
+.collabs-rail::-webkit-scrollbar-thumb { background: var(--line); border-radius: 2px; }
+.collab-card {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 110px;
+  padding: 14px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  cursor: pointer;
+  transition: box-shadow 0.2s, border-color 0.2s;
+  scroll-snap-align: start;
+  text-align: center;
+}
+.collab-card:hover, .collab-card:focus-visible {
+  border-color: var(--pink);
+  box-shadow: var(--shadow-hover);
+}
+.collab-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.collab-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tint-lav);
+  color: var(--ink-soft);
+  font-weight: 700;
+  font-size: 20px;
+}
+.collab-card-studio .collab-avatar-fallback {
+  background: var(--tint-mint);
+}
+.collab-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.3;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.collab-meta {
+  font-size: 11px;
+  color: var(--mute);
+  line-height: 1.2;
+}

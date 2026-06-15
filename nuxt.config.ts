@@ -6,7 +6,67 @@ export default defineNuxtConfig({
   // 放っておくと Nitro が cloudflare-module（サーバ Worker）プリセットを自動選択し、
   // `nuxt generate`（prerender）と食い違って index.mjs 不在で deploy が落ちる。
   // ここで static を固定し、ローカル＝本番ともに `.output/public` の純静的出力に統一する。
-  nitro: { preset: 'static' },
+  nitro: {
+    preset: 'static',
+    prerender: { concurrency: 5 },
+  },
+  hooks: {
+    async 'prerender:routes'(ctx) {
+      const AL = 'https://graphql.anilist.co'
+      const gql = (query: string) => globalThis.fetch(AL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query }),
+        signal: AbortSignal.timeout(15000),
+      }).then(r => r.json())
+
+      try {
+        const res: any = await gql(`{
+          creators: Page(perPage: 50) { staff(sort: FAVOURITES_DESC) { id } }
+          studios: Page(perPage: 30) { studios(sort: FAVOURITES_DESC) { id } }
+        }`)
+        const staffIds: number[] = (res?.data?.creators?.staff ?? []).map((s: any) => s.id)
+        const studioIds: number[] = (res?.data?.studios?.studios ?? []).map((s: any) => s.id)
+
+        for (const id of staffIds) {
+          ctx.routes.add(`/creator/${id}`)
+          ctx.routes.add(`/director/${id}`)
+          ctx.routes.add(`/voice/${id}`)
+        }
+        for (const id of studioIds) ctx.routes.add(`/studio/${id}`)
+        console.log(`[prerender] Added ${staffIds.length * 3} staff + ${studioIds.length} studio routes`)
+
+        const names: Record<string, { full: string; native: string | null }> = {}
+        const studioNames: Record<string, string> = {}
+
+        for (let i = 0; i < staffIds.length; i += 25) {
+          const batch = staffIds.slice(i, i + 25)
+          const r: any = await gql(`{ Page(perPage:25) { staff(id_in:[${batch}]) { id name { full native } } } }`)
+          for (const s of r?.data?.Page?.staff ?? []) names[s.id] = s.name
+        }
+        for (let i = 0; i < studioIds.length; i += 25) {
+          const batch = studioIds.slice(i, i + 25)
+          const r: any = await gql(`{ Page(perPage:25) { studios(id_in:[${batch}]) { id name } } }`)
+          for (const s of r?.data?.Page?.studios ?? []) studioNames[s.id] = s.name
+        }
+
+        const { writeFileSync } = await import('node:fs')
+        const { resolve } = await import('node:path')
+        writeFileSync(resolve('public/_seo-names.json'), JSON.stringify({ names, studioNames }), 'utf-8')
+        console.log(`[prerender] Cached ${Object.keys(names).length} staff + ${Object.keys(studioNames).length} studio names`)
+
+        const siteUrl = 'https://creator-discovery-app.devshota-works.workers.dev'
+        const allRoutes = ['/']
+        for (const id of staffIds) allRoutes.push(`/creator/${id}`, `/director/${id}`, `/voice/${id}`)
+        for (const id of studioIds) allRoutes.push(`/studio/${id}`)
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${allRoutes.map(r => `  <url><loc>${siteUrl}${r}</loc></url>`).join('\n')}\n</urlset>\n`
+        writeFileSync(resolve('public/sitemap.xml'), xml, 'utf-8')
+        console.log(`[prerender] Wrote sitemap.xml with ${allRoutes.length} URLs`)
+      } catch (e) {
+        console.warn('[prerender] AniList fetch failed, skipping SEO routes:', (e as Error).message)
+      }
+    }
+  },
   typescript: {
     shim: false
   },

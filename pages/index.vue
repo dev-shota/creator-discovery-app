@@ -115,22 +115,42 @@
               :aria-label="searchMode === 'title' ? '作品の候補' : searchMode === 'studio' ? '制作会社の候補' : '作り手の候補'"
             >
               <!-- 入力が空でフォーカス中: 現モードの「最近見た」を出す（recent セクション・#1） -->
-              <template v-if="showRecent">
-                <li class="candidate-section-label">{{ recentLabel }}</li>
-                <li
-                  v-for="r in currentRecent"
-                  :key="`recent-${r.id}`"
-                  class="candidate-item"
-                  role="option"
-                  :aria-selected="false"
-                  @mousedown.prevent
-                  @click="selectRecent(r)"
-                >
-                  <span class="candidate-avatar candidate-avatar-fallback" aria-hidden="true">
-                    {{ (r.name || '?').slice(0, 1) }}
-                  </span>
-                  <span class="candidate-name-native">{{ r.name }}</span>
-                </li>
+              <template v-if="showRecent || showPopularStudios">
+                <template v-if="showRecent">
+                  <li class="candidate-section-label">{{ recentLabel }}</li>
+                  <li
+                    v-for="r in currentRecent"
+                    :key="`recent-${r.id}`"
+                    class="candidate-item"
+                    role="option"
+                    :aria-selected="false"
+                    @mousedown.prevent
+                    @click="selectRecent(r)"
+                  >
+                    <span class="candidate-avatar candidate-avatar-fallback" aria-hidden="true">
+                      {{ (r.name || '?').slice(0, 1) }}
+                    </span>
+                    <span class="candidate-name-native">{{ r.name }}</span>
+                  </li>
+                </template>
+                <template v-if="showPopularStudios && popularStudiosFiltered.length > 0">
+                  <li class="candidate-section-label">人気の制作会社</li>
+                  <li
+                    v-for="st in popularStudiosFiltered"
+                    :key="`pop-${st.id}`"
+                    class="candidate-item"
+                    role="option"
+                    :aria-selected="false"
+                    @mousedown.prevent
+                    @click="selectStudio(st)"
+                  >
+                    <span class="candidate-avatar candidate-avatar-fallback" aria-hidden="true">
+                      {{ (st.name || '?').slice(0, 1) }}
+                    </span>
+                    <span class="candidate-name-native">{{ st.name }}</span>
+                    <span v-if="st.isAnimationStudio" class="occupation-tag">制作会社</span>
+                  </li>
+                </template>
               </template>
 
               <template v-else>
@@ -317,7 +337,7 @@
           <span v-if="worksLoading" class="works-loading-indicator">{{ worksLoadedCount > 0 ? `読み込み中… ${worksLoadedCount}件` : '読み込み中…' }}</span>
         </h2>
         <button
-          v-if="selectedStaff && !worksLoading && filteredWorks.length > 0"
+          v-if="(selectedStaff || selectedStudio) && !worksLoading && filteredWorks.length > 0"
           type="button"
           class="share-btn"
           @click="shareOnX"
@@ -544,6 +564,43 @@
               {{ r.year ?? '' }}
             </span>
           </a>
+        </div>
+      </div>
+
+      <!-- よく組むクリエイター / 制作会社 -->
+      <div v-if="collaborators.length > 0 || collabStudios.length > 0" class="collabs-section">
+        <div v-if="collaborators.length > 0">
+          <h3 class="collabs-title">よく組むクリエイター</h3>
+          <div class="collabs-rail">
+            <button
+              v-for="c in collaborators"
+              :key="`collab-${c.id}`"
+              type="button"
+              class="collab-card"
+              @click="goToCollaborator(c)"
+            >
+              <img v-if="c.image" :src="c.image" alt="" class="collab-avatar" loading="lazy" />
+              <span v-else class="collab-avatar collab-avatar-fallback" aria-hidden="true">{{ (c.name.native || c.name.full || '?').slice(0, 1) }}</span>
+              <span class="collab-name">{{ c.name.native || c.name.full }}</span>
+              <span class="collab-meta">{{ c.topRole }} · {{ c.count }}作品</span>
+            </button>
+          </div>
+        </div>
+        <div v-if="collabStudios.length > 0">
+          <h3 class="collabs-title">よく組む制作会社</h3>
+          <div class="collabs-rail">
+            <button
+              v-for="s in collabStudios"
+              :key="`collab-studio-${s.id}`"
+              type="button"
+              class="collab-card collab-card-studio"
+              @click="goToCollabStudio(s)"
+            >
+              <span class="collab-avatar collab-avatar-fallback" aria-hidden="true">{{ s.name.slice(0, 1) }}</span>
+              <span class="collab-name">{{ s.name }}</span>
+              <span class="collab-meta">{{ s.count }}作品</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1382,7 +1439,7 @@ function closeDropdown() {
 // 入力が空でも「最近見た作者」があればドロップダウンを開いて recent を見せる。
 function onFocus() {
   const len = searchQuery.value.trim().length
-  if (len === 0 && currentRecent.value.length > 0) {
+  if (len === 0 && (currentRecent.value.length > 0 || (searchMode.value === 'studio' && popularStudios.value.length > 0))) {
     dropdownOpen.value = true
     return
   }
@@ -1549,6 +1606,7 @@ onMounted(() => {
   // 最近見た（全モード）＋「見た/読んだ」印を localStorage から復元（client のみ）
   loadAllRecent()
   loadSeen()
+  void fetchPopularStudios()
   // 共有 URL / リロードで直接開かれたら復元（全モード対応）。
   restoreFromQuery()
 })
@@ -1586,7 +1644,7 @@ watch(searchQuery, (newVal) => {
     searchError.value = ''
     studioHint.value = ''
     searchLoading.value = false
-    if (newVal.trim().length === 0 && currentRecent.value.length > 0) {
+    if (newVal.trim().length === 0 && (currentRecent.value.length > 0 || (searchMode.value === 'studio' && popularStudios.value.length > 0))) {
       dropdownOpen.value = true
       activeIndex.value = -1
     } else {
@@ -2041,6 +2099,7 @@ async function loadStudioWorks(id: number, mySeq: number) {
         relations: { edges: [] }
       }
     })),
+    onBatch: async (works) => { await loadCollaborators(works, null, id, mySeq) },
     seq: mySeq,
   }
   await runWorksBatch(true)
@@ -2256,6 +2315,8 @@ function clearSelection() {
   mediaAuthorChoices.value = []
   recommendations.value = []
   recsAnchorTitle.value = ''
+  collaborators.value = []
+  collabStudios.value = []
   clearFilters()
   // 段階ロード状態もリセット
   worksCtl = null
@@ -2298,7 +2359,7 @@ async function loadWorks(id: number, mySeq: number) {
       })
     },
     // 表示後にアニメ化（制作会社）バッジを後追いで差し込む（best-effort）。
-    onBatch: async (works) => { await loadStudioBadges(works, mySeq) },
+    onBatch: async (works) => { await loadStudioBadges(works, mySeq); if (mySeq === selectSeq) await loadCollaborators(works, id, null, mySeq) },
     seq: mySeq,
   }
   await runWorksBatch(true)
@@ -2363,6 +2424,7 @@ async function loadDirectorWorks(id: number, mySeq: number) {
         .filter(e => { if (seen.has(e.node.id)) return false; seen.add(e.node.id); return true })
         .map(e => ({ staffRole: '監督', node: { ...e.node, relations: { edges: [] } } }))
     },
+    onBatch: async (works) => { await loadCollaborators(works, id, null, mySeq) },
     seq: mySeq,
   }
   await runWorksBatch(true)
@@ -2399,6 +2461,7 @@ async function loadStaffRoleWorks(id: number, mySeq: number, roleKey: RoleKey) {
         .filter(e => { if (seen.has(e.node.id)) return false; seen.add(e.node.id); return true })
         .map(e => ({ staffRole: label, node: { ...e.node, relations: { edges: [] } } }))
     },
+    onBatch: async (works) => { await loadCollaborators(works, id, null, mySeq) },
     seq: mySeq,
   }
   await runWorksBatch(true)
@@ -2488,6 +2551,7 @@ async function loadVoiceWorks(id: number, mySeq: number) {
       }
       return [...groups.values()].map(g => g.edge)
     },
+    onBatch: async (works) => { await loadCollaborators(works, id, null, mySeq) },
     seq: mySeq,
   }
   await runWorksBatch(true)
@@ -2833,9 +2897,16 @@ async function selectStaffById(id: number) {
 
 // X（旧 Twitter）へ現在の作者ページを共有する（Web Intent）
 function shareOnX() {
-  if (!selectedStaff.value) return
-  const name = selectedStaff.value.name.native || selectedStaff.value.name.full
-  const text = `「${name}」の作品とアニメ化スタジオ｜Creator Discovery`
+  const name = selectedStaff.value
+    ? (selectedStaff.value.name.native || selectedStaff.value.name.full)
+    : selectedStudio.value?.name
+  if (!name) return
+  const suffix = selectedStudio.value ? 'の制作作品'
+    : selectedStaffKind.value === 'director' ? 'の監督作品'
+    : selectedStaffKind.value === 'voice' ? 'の出演作'
+    : selectedStaffKind.value === 'staffrole' ? `の${selectedRoleLabel.value}作`
+    : 'の作品'
+  const text = `「${name}」${suffix}｜Creator Discovery`
   const url = window.location.href
   const intent = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`
   window.open(intent, '_blank', 'noopener')
@@ -3030,4 +3101,158 @@ async function loadRecommendations(anchor: WorkEdge | null, mySeq: number) {
     if (my === recsSeq) recsLoading.value = false
   }
 }
+
+// ── よく組むクリエイター / 制作会社（全モード共通・best-effort）──────────────────
+const COLLAB_QUERY = `
+  query($ids: [Int]) {
+    Page(perPage: 50) {
+      media(id_in: $ids, type: ANIME) {
+        id
+        staff(sort: [RELEVANCE], perPage: 12) {
+          edges { role node { id name { full native } primaryOccupations image { medium } } }
+        }
+        studios(isMain: true) { nodes { id name isAnimationStudio } }
+      }
+    }
+  }
+`
+interface CollabPerson {
+  id: number
+  name: { full: string; native: string | null }
+  occupations: string[]
+  image: string | null
+  topRole: string
+  count: number
+}
+interface CollabStudio {
+  id: number
+  name: string
+  count: number
+}
+const collaborators = ref<CollabPerson[]>([])
+const collabStudios = ref<CollabStudio[]>([])
+
+function collabRoleJp(role: string): string {
+  if (isDirectorRole(role)) return '監督'
+  if (/Series Composition/.test(role)) return 'シリーズ構成'
+  if (/Script|Screenplay/.test(role)) return '脚本'
+  if (/Character Design/.test(role)) return 'キャラ原案'
+  if (/\bMusic\b/.test(role) && !/Director/.test(role)) return '音楽'
+  if (/Producer/.test(role)) return 'プロデューサー'
+  if (/Original/.test(role)) return '原作'
+  return role
+}
+
+function pickBestRole(roles: string[]): string {
+  const tests: ((r: string) => boolean)[] = [
+    r => isDirectorRole(r),
+    r => /Series Composition/.test(r),
+    r => /Character Design/.test(r),
+    r => /Script|Screenplay/.test(r),
+    r => /\bMusic\b/.test(r) && !/Director/.test(r),
+    r => /Producer/.test(r),
+    r => /Original/.test(r),
+  ]
+  for (const test of tests) {
+    const match = roles.find(test)
+    if (match) return collabRoleJp(match)
+  }
+  return collabRoleJp(roles[0] ?? '')
+}
+
+async function loadCollaborators(
+  works: WorkEdge[],
+  excludeStaffId: number | null,
+  excludeStudioId: number | null,
+  mySeq: number
+) {
+  collaborators.value = []
+  collabStudios.value = []
+  const animeIds = new Set<number>()
+  for (const w of works) {
+    const adaptations = (w.node.relations?.edges ?? []).filter(r => r.relationType === 'ADAPTATION' && r.node.type === 'ANIME')
+    if (adaptations.length > 0) adaptations.forEach(r => animeIds.add(r.node.id))
+    else animeIds.add(w.node.id)
+  }
+  if (animeIds.size === 0) return
+  const topIds = [...animeIds].slice(0, 18)
+  const personMap = new Map<number, { name: { full: string; native: string | null }; occ: string[]; image: string | null; roles: string[]; count: number }>()
+  const studioMap = new Map<number, { name: string; count: number }>()
+  for (let i = 0; i < topIds.length; i += 6) {
+    const chunk = topIds.slice(i, i + 6)
+    try {
+      const data = await anilist<{ data: { Page: { media: {
+        id: number
+        staff: { edges: { role: string; node: { id: number; name: { full: string; native: string | null }; primaryOccupations: string[]; image: { medium: string | null } | null } }[] } | null
+        studios: { nodes: { id: number; name: string; isAnimationStudio: boolean }[] } | null
+      }[] } } }>(COLLAB_QUERY, { ids: chunk })
+      if (mySeq !== selectSeq) return
+      for (const media of data?.data?.Page?.media ?? []) {
+        for (const edge of media.staff?.edges ?? []) {
+          const sid = edge.node.id
+          if (sid === excludeStaffId) continue
+          const role = (edge.role ?? '').trim()
+          const existing = personMap.get(sid)
+          if (existing) {
+            if (!existing.roles.includes(role)) existing.roles.push(role)
+            existing.count++
+          } else {
+            personMap.set(sid, { name: edge.node.name, occ: edge.node.primaryOccupations ?? [], image: edge.node.image?.medium ?? null, roles: [role], count: 1 })
+          }
+        }
+        for (const studio of media.studios?.nodes ?? []) {
+          if (studio.id === excludeStudioId) continue
+          const existing = studioMap.get(studio.id)
+          if (existing) existing.count++
+          else studioMap.set(studio.id, { name: studio.name, count: 1 })
+        }
+      }
+    } catch (e) {
+      if (isRateLimited(e)) break
+    }
+  }
+  if (mySeq !== selectSeq) return
+  collaborators.value = [...personMap.entries()]
+    .filter(([_, p]) => p.count >= 2)
+    .sort(([_, a], [__, b]) => b.count - a.count)
+    .slice(0, 10)
+    .map(([id, p]) => ({ id, name: p.name, occupations: p.occ, image: p.image, topRole: pickBestRole(p.roles), count: p.count }))
+  collabStudios.value = [...studioMap.entries()]
+    .filter(([_, s]) => s.count >= 2)
+    .sort(([_, a], [__, b]) => b.count - a.count)
+    .slice(0, 6)
+    .map(([id, s]) => ({ id, name: s.name, count: s.count }))
+}
+
+function goToCollaborator(c: CollabPerson) {
+  const name = c.name.native || c.name.full
+  if (c.topRole === '監督') { saveRecent('director', c.id, name); selectDirectorById(c.id, name); return }
+  if (c.topRole === 'シリーズ構成' || c.topRole === '脚本') { saveRecent('writing', c.id, name); selectStaffRoleById(c.id, name, 'writing'); return }
+  if (c.topRole === 'キャラ原案') { saveRecent('chardesign', c.id, name); selectStaffRoleById(c.id, name, 'chardesign'); return }
+  saveRecent('creator', c.id, name); selectStaffById(c.id)
+}
+
+function goToCollabStudio(s: CollabStudio) {
+  selectStudio({ id: s.id, name: s.name, favourites: null, isAnimationStudio: true })
+}
+
+// ── 人気の制作会社（起動時に取得・スタジオ検索の空入力時にドロップダウンへ出す）───────
+const POPULAR_STUDIOS_QUERY = `
+  query { Page(perPage: 30) { studios(sort: FAVOURITES_DESC) { id name favourites isAnimationStudio } } }
+`
+const popularStudios = ref<StudioCandidate[]>([])
+async function fetchPopularStudios() {
+  try {
+    const data = await anilist<{ data: { Page: { studios: StudioCandidate[] } } }>(POPULAR_STUDIOS_QUERY)
+    popularStudios.value = (data?.data?.Page?.studios ?? []).filter(s => s.isAnimationStudio)
+  } catch { /* best effort */ }
+}
+const showPopularStudios = computed(() =>
+  dropdownOpen.value && searchQuery.value.trim().length === 0 &&
+  searchMode.value === 'studio' && popularStudios.value.length > 0
+)
+const popularStudiosFiltered = computed(() => {
+  const recentIds = new Set(currentRecent.value.map(r => r.id))
+  return popularStudios.value.filter(s => !recentIds.has(s.id)).slice(0, 12)
+})
 </script>
