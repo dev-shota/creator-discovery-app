@@ -225,19 +225,23 @@ a {
 /* ── Hero（左テキスト / 右ビジュアル） ── */
 .hero {
   display: flex;
-  align-items: center;
+  /* 上端揃え。中央揃え（center）だと、左カラム .hero-text の高さ（＝検索の下の
+     「最近見た」チップの数・折り返し行数で変わる）に画像が中央基準で連動して上下に動く。
+     画像を上端に固定すれば、下に伸びるチップは画像を押さない＝is-compact と同じ方針。 */
+  align-items: flex-start;
   gap: 36px;
   margin-bottom: 44px;
 }
 
 .hero-text {
-  flex: 1 1 57%;
+  /* 検索（7タブ＋入力欄）に横幅を多めに渡す。右の画像側を狭めて相対的に広げる。 */
+  flex: 1 1 64%;
   min-width: 0;
 }
 
 .hero-visual {
   position: relative;
-  flex: 1 1 43%;
+  flex: 1 1 36%;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -256,7 +260,7 @@ a {
 
 .hero-img {
   width: 100%;
-  max-width: 460px;
+  max-width: 400px; /* 少し小さく（検索側に幅を譲る・ユーザー指示 2026-06-15） */
   height: auto;
   display: block;
 }
@@ -362,7 +366,7 @@ a {
 
 /* Search をヒーローの主役として少しゆったり */
 .search-hero {
-  max-width: 720px;
+  max-width: 860px;
 }
 
 /* ── How it works（作り手→作品→スタジオ） ── */
@@ -438,6 +442,9 @@ a {
 /* ── Search mode toggle（作者で探す / 作品名で探す・segmented） ── */
 .search-mode {
   display: inline-flex;
+  /* 7タブは常に1行（2段にしない・ユーザー指示）。横幅は .hero-text を広げて確保し、
+     入り切らない狭幅では下の @media でハンバーガー(.mode-menu)へ切り替える。
+     flex-wrap は使わない（=ピルの2段折り返しを禁止）。 */
   gap: 4px;
   padding: 4px;
   margin-bottom: 12px;
@@ -457,6 +464,7 @@ a {
   font-weight: 800;
   color: var(--mute);
   cursor: pointer;
+  white-space: nowrap; /* ラベルを文字単位で割らせない（割れる前にピル単位で折り返す） */
   transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
 
