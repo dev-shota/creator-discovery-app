@@ -442,10 +442,13 @@ a {
 /* ── Search mode toggle（作者で探す / 作品名で探す・segmented） ── */
 .search-mode {
   display: inline-flex;
-  /* 7タブは常に1行（2段にしない・ユーザー指示）。横幅は .hero-text を広げて確保し、
-     入り切らない狭幅では下の @media でハンバーガー(.mode-menu)へ切り替える。
-     flex-wrap は使わない（=ピルの2段折り返しを禁止）。 */
+  /* 2026-06-15 改訂: 11モードを「主要5 + もっと見る + (展開で副6)」に分割（user req）。
+     主要5+もっと見るは1行に収まる（旧 7タブ単段ルール の意図を維持）。
+     展開時は副6個が追加され12個になるため row-gap で2段化を許す。狭い画面では
+     下の @media でハンバーガー(.mode-menu)へ切り替える（変更なし）。 */
+  flex-wrap: wrap;
   gap: 4px;
+  row-gap: 6px;
   padding: 4px;
   margin-bottom: 12px;
   background: var(--bg-soft);
@@ -476,6 +479,27 @@ a {
   background: var(--primary);
   color: var(--primary-ink);
   box-shadow: 0 4px 12px rgba(237, 58, 140, 0.24);
+}
+
+/* 副モード（もっと見るで展開で出るタブ）。非active 時は主要よりさらに薄く、
+   active 時は主要と同じ pill（区別なし）。 */
+.mode-btn-secondary {
+  color: var(--mute);
+  opacity: 0.85;
+}
+.mode-btn-secondary.is-active {
+  opacity: 1;
+}
+
+/* 「もっと見る/閉じる」トグル。タブとは別の機能性を示すため枠線で軽く分離。
+   pill 内の他要素と高さは合わせる。 */
+.mode-btn.mode-more {
+  border: 1px dashed var(--line);
+  color: var(--ink-soft);
+  padding: 6px 14px;
+}
+.mode-btn.mode-more:hover {
+  background: var(--bg);
 }
 
 /* 狭い画面用のモード・メニュー（ハンバーガー式・タップで開閉・選択で自動クローズ）。
