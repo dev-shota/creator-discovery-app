@@ -28,13 +28,12 @@ export default defineNuxtConfig({
         const staffIds: number[] = (res?.data?.creators?.staff ?? []).map((s: any) => s.id)
         const studioIds: number[] = (res?.data?.studios?.studios ?? []).map((s: any) => s.id)
 
+        const staffViews = ['creator', 'director', 'voice', 'music', 'theme-singer', 'theme-lyrics', 'theme-compose']
         for (const id of staffIds) {
-          ctx.routes.add(`/creator/${id}`)
-          ctx.routes.add(`/director/${id}`)
-          ctx.routes.add(`/voice/${id}`)
+          for (const v of staffViews) ctx.routes.add(`/${v}/${id}`)
         }
         for (const id of studioIds) ctx.routes.add(`/studio/${id}`)
-        console.log(`[prerender] Added ${staffIds.length * 3} staff + ${studioIds.length} studio routes`)
+        console.log(`[prerender] Added ${staffIds.length * staffViews.length} staff + ${studioIds.length} studio routes`)
 
         const names: Record<string, { full: string; native: string | null }> = {}
         const studioNames: Record<string, string> = {}
@@ -57,7 +56,7 @@ export default defineNuxtConfig({
 
         const siteUrl = 'https://creator-discovery-app.devshota-works.workers.dev'
         const allRoutes = ['/']
-        for (const id of staffIds) allRoutes.push(`/creator/${id}`, `/director/${id}`, `/voice/${id}`)
+        for (const id of staffIds) { for (const v of staffViews) allRoutes.push(`/${v}/${id}`) }
         for (const id of studioIds) allRoutes.push(`/studio/${id}`)
         const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${allRoutes.map(r => `  <url><loc>${siteUrl}${r}</loc></url>`).join('\n')}\n</urlset>\n`
         writeFileSync(resolve('public/sitemap.xml'), xml, 'utf-8')
