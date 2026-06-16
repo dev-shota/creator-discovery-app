@@ -685,6 +685,56 @@
         </div>
       </div>
 
+      <!-- ═══ MusicBrainz ディスコグラフィー（音楽系モード時のみ）═══ -->
+      <div v-if="(mbLoading || mbReleaseGroups.length > 0 || mbError) && MUSIC_MODES.has(searchMode)" class="mb-section">
+        <div class="section-wave" aria-hidden="true">
+          <svg viewBox="0 0 1440 60" preserveAspectRatio="none"><path d="M0,35 C240,55 480,10 720,30 C960,50 1200,15 1440,35 L1440,60 L0,60Z" fill="var(--tint-yellow)"/></svg>
+        </div>
+        <div class="mb-panel">
+          <button type="button" class="mb-toggle" :aria-expanded="mbOpen" @click="mbOpen = !mbOpen">
+            <h3 class="mb-title">
+              ディスコグラフィー
+              <span v-if="mbArtist" class="mb-artist-name">{{ mbArtist.name }}</span>
+              <span class="mb-badge">MusicBrainz</span>
+            </h3>
+            <span class="mb-toggle-arrow">{{ mbOpen ? '▲' : '▼' }}</span>
+          </button>
+
+          <div v-if="mbOpen">
+            <p v-if="mbLoading" class="mb-status">
+              <img src="/mascot-loading.png" alt="" class="loading-mascot" width="24" height="24" />
+              MusicBrainz を検索中…
+            </p>
+            <p v-else-if="mbError" class="mb-status mb-status-error">{{ mbError }}</p>
+
+            <template v-else-if="mbReleaseGroups.length > 0">
+              <div v-for="group in mbGroupedReleases" :key="group.label" class="mb-group">
+                <h4 class="mb-group-label">{{ group.label }}<span class="mb-group-count">{{ group.items.length }}</span></h4>
+                <div class="mb-grid">
+                  <a
+                    v-for="rg in group.items"
+                    :key="rg.id"
+                    :href="`https://musicbrainz.org/release-group/${rg.id}`"
+                    target="_blank"
+                    rel="noopener"
+                    class="mb-card"
+                  >
+                    <span class="mb-card-title">{{ rg.title }}</span>
+                    <span class="mb-card-meta">
+                      <span v-if="mbYear(rg)" class="mb-card-year">{{ mbYear(rg) }}</span>
+                    </span>
+                  </a>
+                </div>
+              </div>
+              <p class="mb-attribution">
+                Data from <a href="https://musicbrainz.org" target="_blank" rel="noopener">MusicBrainz</a>.
+                Licensed under <a href="https://creativecommons.org/licenses/by-nc-sa/3.0/" target="_blank" rel="noopener">CC BY-NC-SA 3.0</a>.
+              </p>
+            </template>
+          </div>
+        </div>
+      </div>
+
       <!-- セクション区切り wave -->
       <div v-if="studioKeyStaff.length > 0 || collaborators.length > 0 || collabStudios.length > 0" class="section-wave" aria-hidden="true">
         <svg viewBox="0 0 1440 60" preserveAspectRatio="none"><path d="M0,35 C240,55 480,10 720,30 C960,50 1200,15 1440,35 L1440,60 L0,60Z" fill="var(--tint-lav)"/></svg>
@@ -825,6 +875,8 @@ const affiliateActive = computed(() => AFFILIATE_TAG.length > 0)
 const { anilist } = useAniList()
 const { seenIds, loadSeen, toggleSeen } = useSeen()
 const { recentByKind, loadAllRecent, saveRecent } = useRecent()
+const { searchArtist, getReleaseGroups } = useMusicBrainz()
+import type { MBArtist, MBReleaseGroup } from '~/composables/useMusicBrainz'
 
 // ── SEO / OGP / favicon（R2）──────────────────────────────────────────────
 const SITE_TITLE = 'Creator Discovery — 作り手から、次に見る作品を見つける'
@@ -1203,6 +1255,92 @@ const statsTopGenres = computed(() => {
   const max = sorted.length > 0 ? sorted[0][1] : 1
   return sorted.map(([g, c]) => ({ label: genreJp(g), count: c, pct: (c / max) * 100 }))
 })
+
+// ── MusicBrainz ディスコグラフィー ──────────────────────────────────────
+const mbArtist = ref<MBArtist | null>(null)
+const mbReleaseGroups = ref<MBReleaseGroup[]>([])
+const mbLoading = ref(false)
+const mbError = ref('')
+const mbOpen = ref(true)
+
+const MUSIC_MODES = new Set<SearchMode>(['music', 'theme-singer', 'theme-lyrics', 'theme-compose'])
+
+const MB_TYPE_JP: Record<string, string> = {
+  Album: 'アルバム', Single: 'シングル', EP: 'EP', Broadcast: '放送', Other: 'その他',
+}
+const MB_SECONDARY_JP: Record<string, string> = {
+  Soundtrack: 'サントラ', Compilation: 'ベスト', Live: 'ライブ', Remix: 'リミックス',
+  'DJ-mix': 'DJ MIX', Mixtape: 'ミックステープ', Demo: 'デモ', 'Field recording': 'フィールド',
+  'Audio drama': 'ドラマCD', Audiobook: 'オーディオブック', Interview: 'インタビュー',
+  Spokenword: 'スポークンワード',
+}
+function mbTypeLabel(rg: MBReleaseGroup): string {
+  const sec = rg['secondary-types']
+  if (sec && sec.length > 0) {
+    const jp = sec.map(s => MB_SECONDARY_JP[s] ?? s).join('/')
+    return jp
+  }
+  return MB_TYPE_JP[rg['primary-type'] ?? ''] ?? rg['primary-type'] ?? ''
+}
+function mbYear(rg: MBReleaseGroup): string {
+  return rg['first-release-date']?.slice(0, 4) ?? ''
+}
+
+const mbGroupedReleases = computed(() => {
+  const groups = new Map<string, MBReleaseGroup[]>()
+  const order = ['Album', 'Single', 'EP', 'Soundtrack', 'Compilation', 'Live', 'Other']
+  for (const rg of mbReleaseGroups.value) {
+    const sec = rg['secondary-types']
+    const key = (sec && sec.length > 0) ? sec[0] : (rg['primary-type'] ?? 'Other')
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(rg)
+  }
+  for (const [, list] of groups) {
+    list.sort((a, b) => (b['first-release-date'] ?? '').localeCompare(a['first-release-date'] ?? ''))
+  }
+  return [...groups.entries()]
+    .sort((a, b) => {
+      const ai = order.indexOf(a[0]), bi = order.indexOf(b[0])
+      return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi)
+    })
+    .map(([key, list]) => ({ label: MB_SECONDARY_JP[key] ?? MB_TYPE_JP[key] ?? key, items: list }))
+})
+
+function clearMusicBrainz() {
+  mbArtist.value = null
+  mbReleaseGroups.value = []
+  mbLoading.value = false
+  mbError.value = ''
+}
+
+async function loadMusicBrainz(staffName: { full: string; native: string | null }) {
+  clearMusicBrainz()
+  mbLoading.value = true
+  try {
+    const searchName = staffName.full || staffName.native || ''
+    if (!searchName) return
+    const artist = await searchArtist(searchName)
+    if (!artist) {
+      if (staffName.native && staffName.native !== staffName.full) {
+        const alt = await searchArtist(staffName.native)
+        if (alt) {
+          mbArtist.value = alt
+          const rgs = await getReleaseGroups(alt.id, 200)
+          mbReleaseGroups.value = rgs
+          return
+        }
+      }
+      return
+    }
+    mbArtist.value = artist
+    const rgs = await getReleaseGroups(artist.id, 200)
+    mbReleaseGroups.value = rgs
+  } catch (e) {
+    mbError.value = 'MusicBrainz の読み込みに失敗しました。'
+  } finally {
+    mbLoading.value = false
+  }
+}
 
 // ── 表示パイプライン: フィルタ → ソート、および 代表作 / 隠れた名作の導出 ───────────
 function passesFilters(e: WorkEdge): boolean {
@@ -2221,6 +2359,7 @@ async function selectStaff(staff: StaffCandidate) {
   mediaAuthorChoices.value = []
   selectedStudio.value = null
   resolveNotice.value = ''
+  clearMusicBrainz()
   const mySeq = ++selectSeq
   selectedStaff.value = staff
   // 監督モード: その人物の「監督作品（アニメ）」を表示。最近見た監督へ保存（URL は v1 で載せない）。
@@ -2251,10 +2390,11 @@ async function selectStaff(staff: StaffCandidate) {
     await loadStaffRoleWorks(staff.id, mySeq, 'chardesign')
     return
   }
-  // 音楽/OP・ED モード: staffRole の正規表現で絞り込む。
+  // 音楽/OP・ED モード: staffRole の正規表現で絞り込む。MusicBrainz も並行検索。
   if (searchMode.value === 'music' || searchMode.value === 'theme-singer' || searchMode.value === 'theme-lyrics' || searchMode.value === 'theme-compose') {
     saveRecent(searchMode.value, staff.id, name)
     $posthog?.capture('creator_viewed', { staff_id: staff.id, staff_name: name, source: `${searchMode.value}_search` })
+    loadMusicBrainz(staff.name)
     await loadStaffRoleWorks(staff.id, mySeq, searchMode.value as RoleKey)
     return
   }
@@ -2364,9 +2504,11 @@ async function selectDirectorById(id: number, name: string) {
 async function selectStaffRoleById(id: number, name: string, roleKey: RoleKey) {
   selectedStudio.value = null
   mediaAuthorChoices.value = []
+  clearMusicBrainz()
   closeDropdown()
   const mySeq = ++selectSeq
   selectedStaff.value = { id, name: { full: name, native: name }, primaryOccupations: [], favourites: null, image: null }
+  if (MUSIC_MODES.has(searchMode.value)) loadMusicBrainz({ full: name, native: name })
   await loadStaffRoleWorks(id, mySeq, roleKey)
 }
 

@@ -35,6 +35,7 @@
   --tint-pink: #fff2f6;
   --tint-mint: #f0faf8;
   --tint-lav: #f4f0ff;
+  --tint-yellow: #fffce8;
 
   /* Primary action */
   --primary: var(--pink);
@@ -2108,6 +2109,7 @@ button.studio-badge {
   --tint-pink: #281828;
   --tint-mint: #182828;
   --tint-lav: #201e30;
+  --tint-yellow: #28261a;
 
   --teal-badge: #50d4cc;
 
@@ -2144,4 +2146,130 @@ button.studio-badge {
   color: var(--ink);
   border-color: var(--ink-soft);
   background: var(--bg-soft);
+}
+
+/* ═══ MusicBrainz Discography ═══ */
+.mb-section { margin-top: 1rem; }
+.mb-panel {
+  background: var(--tint-yellow);
+  border-radius: var(--r-l);
+  padding: 1.5rem 1.25rem;
+}
+.mb-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+.mb-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.mb-artist-name {
+  font-weight: 500;
+  color: var(--mute);
+  font-size: 0.88rem;
+}
+.mb-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--yellow);
+  color: #2a2a33;
+  padding: 0.15em 0.5em;
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+}
+.mb-toggle-arrow {
+  color: var(--mute);
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+.mb-status {
+  margin: 1rem 0 0;
+  color: var(--mute);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.mb-status-error { color: var(--pink); }
+.mb-group { margin-top: 1.25rem; }
+.mb-group-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  margin: 0 0 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.mb-group-count {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--mute);
+  background: var(--line);
+  padding: 0.05em 0.45em;
+  border-radius: var(--r-pill);
+}
+.mb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.5rem;
+}
+.mb-card {
+  display: flex;
+  flex-direction: column;
+  padding: 0.65rem 0.75rem;
+  background: var(--card);
+  border-radius: var(--r-m);
+  text-decoration: none;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.mb-card:hover {
+  border-color: var(--yellow);
+  box-shadow: 0 2px 12px rgba(239, 243, 60, 0.12);
+}
+.mb-card-title {
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.mb-card-meta {
+  margin-top: 0.25rem;
+  font-size: 0.72rem;
+  color: var(--mute);
+}
+.mb-card-year {
+  font-variant-numeric: tabular-nums;
+}
+.mb-attribution {
+  margin-top: 1rem;
+  font-size: 0.68rem;
+  color: var(--mute);
+}
+.mb-attribution a {
+  color: var(--teal-text);
+  text-decoration: underline;
+}
+@media (max-width: 600px) {
+  .mb-grid { grid-template-columns: 1fr 1fr; }
+  .mb-panel { padding: 1rem; }
 }
