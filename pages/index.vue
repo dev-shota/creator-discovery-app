@@ -626,12 +626,32 @@
       </div>
 
       <!-- セクション区切り wave -->
-      <div v-if="collaborators.length > 0 || collabStudios.length > 0" class="section-wave" aria-hidden="true">
+      <div v-if="studioKeyStaff.length > 0 || collaborators.length > 0 || collabStudios.length > 0" class="section-wave" aria-hidden="true">
         <svg viewBox="0 0 1440 60" preserveAspectRatio="none"><path d="M0,35 C240,55 480,10 720,30 C960,50 1200,15 1440,35 L1440,60 L0,60Z" fill="var(--tint-lav)"/></svg>
       </div>
 
-      <!-- よく組むクリエイター / 制作会社 -->
-      <div v-if="collaborators.length > 0 || collabStudios.length > 0" class="collabs-section">
+      <!-- よく組むクリエイター / 制作会社（スタジオモード時はロール別表示） -->
+      <div v-if="studioKeyStaff.length > 0" class="collabs-section">
+        <h3 class="collabs-title">この制作会社のクリエイター</h3>
+        <div v-for="group in studioKeyStaff" :key="group.label" class="key-staff-group">
+          <h4 class="key-staff-role-label">{{ group.label }}</h4>
+          <div class="collabs-rail">
+            <button
+              v-for="c in group.staff"
+              :key="`ks-${c.id}`"
+              type="button"
+              class="collab-card"
+              @click="goToCollaborator(c)"
+            >
+              <img v-if="c.image" :src="c.image" alt="" class="collab-avatar" loading="lazy" />
+              <span v-else class="collab-avatar collab-avatar-fallback" aria-hidden="true">{{ (c.name.native || c.name.full || '?').slice(0, 1) }}</span>
+              <span class="collab-name">{{ c.name.native || c.name.full }}</span>
+              <span class="collab-meta">{{ c.topRole }} · {{ c.count }}作品</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div v-else-if="collaborators.length > 0 || collabStudios.length > 0" class="collabs-section">
         <div v-if="collaborators.length > 0">
           <h3 class="collabs-title">よく組むクリエイター</h3>
           <div class="collabs-rail">
@@ -3448,10 +3468,11 @@ async function loadCollaborators(
     }
   }
   if (mySeq !== selectSeq) return
+  const collabLimit = excludeStudioId != null ? 20 : 10
   collaborators.value = [...personMap.entries()]
     .filter(([_, p]) => p.count >= 2)
     .sort(([_, a], [__, b]) => b.count - a.count)
-    .slice(0, 10)
+    .slice(0, collabLimit)
     .map(([id, p]) => ({ id, name: p.name, occupations: p.occ, image: p.image, topRole: pickBestRole(p.roles), count: p.count }))
   collabStudios.value = [...studioMap.entries()]
     .filter(([_, s]) => s.count >= 2)
@@ -3459,6 +3480,27 @@ async function loadCollaborators(
     .slice(0, 6)
     .map(([id, s]) => ({ id, name: s.name, count: s.count }))
 }
+
+const ROLE_GROUP_ORDER = ['監督', '脚本', 'キャラ原案', '音楽', 'その他のスタッフ'] as const
+type RoleGroupKey = typeof ROLE_GROUP_ORDER[number]
+function roleGroupKey(topRole: string): RoleGroupKey {
+  if (topRole === '監督') return '監督'
+  if (topRole === 'シリーズ構成' || topRole === '脚本') return '脚本'
+  if (topRole === 'キャラ原案') return 'キャラ原案'
+  if (topRole === '音楽' || topRole === '作曲・編曲' || topRole === '作詞' || topRole === 'OP/ED歌手') return '音楽'
+  return 'その他のスタッフ'
+}
+const studioKeyStaff = computed(() => {
+  if (!selectedStudio.value || collaborators.value.length === 0) return []
+  const groups = new Map<RoleGroupKey, CollabPerson[]>()
+  for (const c of collaborators.value) {
+    const key = roleGroupKey(c.topRole)
+    const list = groups.get(key)
+    if (list) list.push(c)
+    else groups.set(key, [c])
+  }
+  return ROLE_GROUP_ORDER.filter(k => groups.has(k)).map(k => ({ label: k, staff: groups.get(k)! }))
+})
 
 function goToCollaborator(c: CollabPerson) {
   const name = c.name.native || c.name.full

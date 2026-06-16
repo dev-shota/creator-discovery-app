@@ -1818,6 +1818,17 @@ button.studio-badge {
 .collabs-section > div + div {
   margin-top: 24px;
 }
+.key-staff-group + .key-staff-group {
+  margin-top: 20px;
+}
+.key-staff-role-label {
+  font-family: var(--font-round);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--mute);
+  margin-bottom: 8px;
+  padding-left: 2px;
+}
 .collabs-title {
   font-family: var(--font-round);
   font-size: 20px;
