@@ -6,6 +6,7 @@
   "name": "creator-discovery-app",
   "compatibility_date": "2025-06-01",
   "assets": {
-    "directory": "./.output/public"
+    "directory": "./.output/public",
+    "not_found_handling": "single-page-application"
   }
 }
