@@ -2132,8 +2132,8 @@ button.studio-badge {
   background: none;
   border: 1px solid var(--line);
   border-radius: var(--r-pill);
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -2,6 +2,17 @@ export default defineNuxtConfig({
   compatibilityDate: '2026-06-14',
   telemetry: false,
   devtools: { enabled: false },
+  modules: ['@nuxt/image'],
+  // @nuxt/image: 外部画像（AniList CDN）は domains 未登録のためパススルー（URL そのまま）。
+  // NuxtImg コンポーネントが decoding="async" を自動付与する。
+  // WebP 自動変換を有効にするには Cloudflare Image Resizing (Pro plan+) が必要:
+  //   provider: 'cloudflare',
+  //   cloudflare: { baseURL: 'https://<custom-domain>/cdn-cgi/image/' },
+  //   domains: ['s4.anilist.co'],
+  image: {
+    quality: 80,
+    format: ['webp'],
+  },
   // このアプリは client-side で AniList を叩く純静的サイト。Cloudflare のビルド環境は
   // 放っておくと Nitro が cloudflare-module（サーバ Worker）プリセットを自動選択し、
   // `nuxt generate`（prerender）と食い違って index.mjs 不在で deploy が落ちる。
@@ -94,6 +105,10 @@ export default defineNuxtConfig({
           rel: 'preconnect',
           href: 'https://fonts.gstatic.com',
           crossorigin: ''
+        },
+        {
+          rel: 'preconnect',
+          href: 'https://s4.anilist.co',
         },
         {
           // PLAY/GROUND 系: 丸み JP サンセリフ + ロゴ用ラウンド + 手書きスクリプト

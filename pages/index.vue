@@ -56,7 +56,7 @@
              見出し・説明の下、検索ボックスの上に中央寄せで置く＝検索バーと結果の間に挟まらない。
              「見出しの右に小さく」は窮屈でレイアウトが崩れる（ユーザー報告 2026-06-15）ため、
              下に中央配置で意図的な hero イラストとして見せる。結果表示中は is-compact で畳む。 -->
-        <img src="/mascot.png" alt="Creator Discovery マスコット" class="hero-img-mini" width="420" height="420" loading="lazy" />
+        <NuxtImg src="/mascot.png" alt="Creator Discovery マスコット" class="hero-img-mini" width="420" height="420" loading="lazy" format="webp" />
 
         <!-- Search（ヒーローの主役アクション・候補は入力直下にドロップダウン） -->
         <div class="search-hero">
@@ -233,7 +233,7 @@
                     @mousedown.prevent
                     @click="selectMediaToAuthor(media)"
                   >
-                    <img
+                    <NuxtImg
                       v-if="media.coverImage?.medium"
                       class="candidate-cover"
                       :src="media.coverImage.medium"
@@ -265,7 +265,7 @@
                     @mousedown.prevent
                     @click="selectStaff(staff)"
                   >
-                    <img
+                    <NuxtImg
                       v-if="staff.image?.medium"
                       class="candidate-avatar"
                       :src="staff.image.medium"
@@ -314,7 +314,7 @@
 
       <!-- 右: ヒーローイラスト（GPT image 2 生成・作り手が作品を生む情景） -->
       <div class="hero-visual" aria-hidden="true">
-        <img src="/mascot.png" alt="" class="hero-img" width="420" height="420" fetchpriority="high" />
+        <NuxtImg src="/mascot.png" alt="" class="hero-img" width="420" height="420" fetchpriority="high" format="webp" />
       </div>
     </section>
 
@@ -378,7 +378,7 @@
       <div class="works-head">
         <h2>
           {{ worksHeading }}
-          <span v-if="worksLoading" class="works-loading-indicator"><img src="/mascot-loading.png" alt="" class="loading-mascot" width="32" height="32" />{{ worksLoadedCount > 0 ? `読み込み中… ${worksLoadedCount}件` : '読み込み中…' }}</span>
+          <span v-if="worksLoading" class="works-loading-indicator"><NuxtImg src="/mascot-loading.png" alt="" class="loading-mascot" width="32" height="32" format="webp" />{{ worksLoadedCount > 0 ? `読み込み中… ${worksLoadedCount}件` : '読み込み中…' }}</span>
         </h2>
         <button
           v-if="(selectedStaff || selectedStudio) && !worksLoading && filteredWorks.length > 0"
@@ -551,7 +551,7 @@
         >
           <div class="work-card-coverwrap">
             <a :href="edge.node.siteUrl" target="_blank" rel="noopener">
-              <img
+              <NuxtImg
                 v-if="edge.node.coverImage?.medium"
                 :src="edge.node.coverImage.medium"
                 :alt="displayTitle(edge.node.title)"
@@ -670,7 +670,7 @@
             class="rec-card"
           >
             <a :href="r.siteUrl" target="_blank" rel="noopener" class="rec-card-link">
-              <img v-if="r.coverImage?.medium" :src="r.coverImage.medium" :alt="displayTitle(r.title)" class="rec-cover" loading="lazy" />
+              <NuxtImg v-if="r.coverImage?.medium" :src="r.coverImage.medium" :alt="displayTitle(r.title)" class="rec-cover" loading="lazy" />
               <span v-else class="rec-cover rec-cover-fallback" aria-hidden="true">?</span>
               <span class="rec-title">{{ displayTitle(r.title) }}</span>
               <span class="rec-meta">
@@ -702,7 +702,7 @@
 
           <div v-if="mbOpen">
             <p v-if="mbLoading" class="mb-status">
-              <img src="/mascot-loading.png" alt="" class="loading-mascot" width="24" height="24" />
+              <NuxtImg src="/mascot-loading.png" alt="" class="loading-mascot" width="24" height="24" format="webp" />
               MusicBrainz を検索中…
             </p>
             <p v-else-if="mbError" class="mb-status mb-status-error">{{ mbError }}</p>
@@ -753,7 +753,7 @@
               class="collab-card"
               @click="goToCollaborator(c)"
             >
-              <img v-if="c.image" :src="c.image" alt="" class="collab-avatar" loading="lazy" />
+              <NuxtImg v-if="c.image" :src="c.image" alt="" class="collab-avatar" loading="lazy" />
               <span v-else class="collab-avatar collab-avatar-fallback" aria-hidden="true">{{ (c.name.native || c.name.full || '?').slice(0, 1) }}</span>
               <span class="collab-name">{{ c.name.native || c.name.full }}</span>
               <span class="collab-meta">{{ c.topRole }} · {{ c.count }}作品</span>
@@ -772,7 +772,7 @@
               class="collab-card"
               @click="goToCollaborator(c)"
             >
-              <img v-if="c.image" :src="c.image" alt="" class="collab-avatar" loading="lazy" />
+              <NuxtImg v-if="c.image" :src="c.image" alt="" class="collab-avatar" loading="lazy" />
               <span v-else class="collab-avatar collab-avatar-fallback" aria-hidden="true">{{ (c.name.native || c.name.full || '?').slice(0, 1) }}</span>
               <span class="collab-name">{{ c.name.native || c.name.full }}</span>
               <span class="collab-meta">{{ c.topRole }} · {{ c.count }}作品</span>

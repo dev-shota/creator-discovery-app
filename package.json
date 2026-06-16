@@ -17,6 +17,7 @@
     "vue-router": "^4.5.0"
   },
   "dependencies": {
+    "@nuxt/image": "^2.0.0",
     "posthog-js": "^1.386.6",
     "wanakana": "^5.3.1"
   }
