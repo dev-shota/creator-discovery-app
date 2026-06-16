@@ -2819,7 +2819,11 @@ interface AuthorChoice {
 // 部分一致で拾う。Storyboard / Key Animation 等は意図的に含めない。
 function themeRoleLabel(raw: string, fallback: string): string {
   const m = raw.match(/\(([^)]+)\)/)
-  if (!m) return fallback
+  if (!m) {
+    if (/^Music Composition$/.test(raw)) return '作曲'
+    if (/^Music Arrangement$/.test(raw)) return '編曲'
+    return fallback
+  }
   const tag = m[1].replace(/\s+/g, '')
   if (/Theme Song Performance|Insert Song Performance/.test(raw)) return `歌手 (${tag})`
   if (/Theme Song Lyrics|Insert Song Lyrics/.test(raw)) return `作詞 (${tag})`
@@ -2835,7 +2839,7 @@ const STAFF_ROLE_FAMILIES: Record<RoleKey, { label: string; match: RegExp }> = {
   music: { label: '音楽', match: /^Music$|^Music\b/ },
   'theme-singer': { label: 'OP/ED歌手', match: /Theme Song Performance|Insert Song Performance/ },
   'theme-lyrics': { label: '作詞', match: /Theme Song Lyrics|Insert Song Lyrics/ },
-  'theme-compose': { label: '作曲・編曲', match: /Theme Song Composition|Theme Song Arrangement|Insert Song Composition|Insert Song Arrangement/ },
+  'theme-compose': { label: '作曲・編曲', match: /Theme Song Composition|Theme Song Arrangement|Insert Song Composition|Insert Song Arrangement|Music Composition|Music Arrangement/ },
 }
 
 // AniList の英語ロールを日本語ラベルへ。AniList は role 文字列に前後の空白を含むことが
@@ -2904,10 +2908,10 @@ function collectAnimeCreators(edges: MediaStaffEdge[]): AuthorChoice[] {
   // 4) 音楽・OP/ED 系スタッフ
   for (const e of edges) {
     const r = (e.role ?? '').trim()
-    if (/^Music$|^Music\b/.test(r) && !/Director/.test(r)) add(e, 'staffrole', '音楽', 'music')
-    else if (/Theme Song Performance|Insert Song Performance/.test(r)) add(e, 'staffrole', 'OP/ED歌手', 'theme-singer')
+    if (/Theme Song Performance|Insert Song Performance/.test(r)) add(e, 'staffrole', 'OP/ED歌手', 'theme-singer')
     else if (/Theme Song Lyrics|Insert Song Lyrics/.test(r)) add(e, 'staffrole', '作詞', 'theme-lyrics')
-    else if (/Theme Song Composition|Theme Song Arrangement|Insert Song Composition|Insert Song Arrangement/.test(r)) add(e, 'staffrole', '作曲・編曲', 'theme-compose')
+    else if (/Theme Song Composition|Theme Song Arrangement|Insert Song Composition|Insert Song Arrangement|Music Composition|Music Arrangement/.test(r)) add(e, 'staffrole', '作曲・編曲', 'theme-compose')
+    else if (/^Music$|^Music\b/.test(r) && !/Director/.test(r)) add(e, 'staffrole', '音楽', 'music')
   }
   return out
 }
@@ -3347,8 +3351,8 @@ function collabRoleJp(role: string): string {
   if (/Character Design/.test(role)) return 'キャラ原案'
   if (/Theme Song Performance/.test(role)) return 'OP/ED歌手'
   if (/Theme Song Lyrics/.test(role)) return '作詞'
-  if (/Theme Song Composition|Theme Song Arrangement/.test(role)) return '作曲・編曲'
-  if (/^Music$|^Music\b/.test(role) && !/Director/.test(role)) return '音楽'
+  if (/Theme Song Composition|Theme Song Arrangement|Insert Song Composition|Insert Song Arrangement|Music Composition|Music Arrangement/.test(role)) return '作曲・編曲'
+  if (/^Music$/.test(role) || (/^Music\b/.test(role) && !/Composition|Arrangement|Director/.test(role))) return '音楽'
   if (/Producer/.test(role)) return 'プロデューサー'
   if (/Original Story/.test(role)) return '原案'
   if (/Original/.test(role)) return '原作'
