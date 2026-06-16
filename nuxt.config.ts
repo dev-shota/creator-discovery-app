@@ -73,9 +73,15 @@ export default defineNuxtConfig({
   app: {
     head: {
       htmlAttrs: { lang: 'ja' },
+      meta: [
+        { name: 'theme-color', content: '#ed3a8c' },
+        { name: 'apple-mobile-web-app-capable', content: 'yes' },
+        { name: 'apple-mobile-web-app-status-bar-style', content: 'default' },
+      ],
       link: [
-        // favicon（public/favicon.svg）
         { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+        { rel: 'apple-touch-icon', href: '/favicon.svg' },
+        { rel: 'manifest', href: '/manifest.json' },
         {
           rel: 'preconnect',
           href: 'https://fonts.googleapis.com'

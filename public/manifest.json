@@ -1,0 +1,18 @@
+{
+  "name": "Creator Discovery — アニメをクリエイターから探す",
+  "short_name": "Creator Discovery",
+  "description": "好きな作者・監督・声優・作曲家からアニメ・漫画を横断検索。クリエイター軸で次に見る一本を発見。",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ed3a8c",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    }
+  ],
+  "lang": "ja",
+  "categories": ["entertainment", "utilities"]
+}

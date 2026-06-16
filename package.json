@@ -1,6 +1,7 @@
 {
   "name": "creator-discovery-app",
   "version": "0.1.0",
+  "description": "Discover anime & manga through creators — search by author, director, voice actor, composer and more.",
   "private": true,
   "scripts": {
     "build": "nuxt build",

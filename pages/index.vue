@@ -60,7 +60,7 @@
               :aria-selected="searchMode === t.mode"
               :class="{ 'is-active': searchMode === t.mode }"
               @click="setSearchMode(t.mode)"
-            >{{ t.label }}</button>
+            ><span class="mode-icon" aria-hidden="true" v-html="modeIconSvg(t.mode)"></span>{{ t.label }}</button>
             <template v-if="moreTabsOpen">
               <button
                 v-for="t in SEARCH_TABS_SECONDARY"
@@ -71,7 +71,7 @@
                 :aria-selected="searchMode === t.mode"
                 :class="{ 'is-active': searchMode === t.mode }"
                 @click="setSearchMode(t.mode)"
-              >{{ t.label }}</button>
+              ><span class="mode-icon" aria-hidden="true" v-html="modeIconSvg(t.mode)"></span>{{ t.label }}</button>
             </template>
             <button
               type="button"
@@ -285,6 +285,16 @@
               class="recent-chip"
               @click="selectRecent(r)"
             >{{ r.name }}</button>
+          </div>
+          <div v-else-if="!selectedStaff && !selectedStudio && mediaAuthorChoices.length === 0 && !hasAnyRecent" class="recent-chips sample-chips">
+            <span class="recent-chips-label">試してみる</span>
+            <button
+              v-for="s in SAMPLE_SUGGESTIONS"
+              :key="s.name"
+              type="button"
+              class="recent-chip"
+              @click="trySample(s)"
+            >{{ s.label }}</button>
           </div>
         </div>
       </div>
@@ -547,19 +557,46 @@
       </div>
 
       <!-- 空表示: フィルタで全部隠れた場合と、そもそも0件を区別する -->
-      <p v-else-if="!worksLoading && !worksError && filteredWorks.length > 0" class="status-empty">
-        絞り込み条件に合う作品がありません。
-        <button type="button" class="inline-link" @click="clearFilters">条件をクリア</button>
-      </p>
-      <p v-else-if="!worksLoading && !worksError" class="status-empty">
-        表示できる作品が見つかりませんでした。
-      </p>
+      <div v-else-if="!worksLoading && !worksError && filteredWorks.length > 0" class="empty-state">
+        <div class="empty-state-illust" aria-hidden="true">
+          <svg viewBox="0 0 120 120" fill="none">
+            <circle cx="50" cy="50" r="28" stroke="#70707d" stroke-width="3" opacity="0.4"/>
+            <line x1="70" y1="70" x2="95" y2="95" stroke="#70707d" stroke-width="4" stroke-linecap="round" opacity="0.4"/>
+            <path d="M42 48h16M50 42v12" stroke="#ed3a8c" stroke-width="2.5" stroke-linecap="round" opacity="0.6"/>
+            <circle cx="95" cy="20" r="2" fill="#eff33c" opacity="0.5"/>
+            <circle cx="20" cy="85" r="1.5" fill="#2dc7c0" opacity="0.5"/>
+            <circle cx="105" cy="75" r="1.5" fill="#a78bfa" opacity="0.4"/>
+          </svg>
+        </div>
+        <p class="status-empty">
+          絞り込み条件に合う作品がありません。
+          <button type="button" class="inline-link" @click="clearFilters">条件をクリア</button>
+        </p>
+      </div>
+      <div v-else-if="!worksLoading && !worksError" class="empty-state">
+        <div class="empty-state-illust" aria-hidden="true">
+          <svg viewBox="0 0 120 120" fill="none">
+            <circle cx="50" cy="50" r="28" stroke="#70707d" stroke-width="3" opacity="0.4"/>
+            <line x1="70" y1="70" x2="95" y2="95" stroke="#70707d" stroke-width="4" stroke-linecap="round" opacity="0.4"/>
+            <path d="M40 50h20" stroke="#ed3a8c" stroke-width="2.5" stroke-linecap="round" opacity="0.6"/>
+            <circle cx="95" cy="20" r="2" fill="#eff33c" opacity="0.5"/>
+            <circle cx="20" cy="85" r="1.5" fill="#2dc7c0" opacity="0.5"/>
+            <circle cx="105" cy="75" r="1.5" fill="#a78bfa" opacity="0.4"/>
+          </svg>
+        </div>
+        <p class="status-empty">表示できる作品が見つかりませんでした。</p>
+      </div>
 
       <!-- 全件取得の安全弁（25ページ）を超えた時だけ続きを取得（通常は出ない＝#5 の誤表示解消） -->
       <div v-if="worksHasMore && !worksLoading" class="load-more-wrap">
         <button type="button" class="load-more-btn" :disabled="worksLoadingMore" @click="loadMoreWorks">
           {{ worksLoadingMore ? '読み込み中…' : 'さらに読み込む' }}
         </button>
+      </div>
+
+      <!-- セクション区切り wave -->
+      <div v-if="recommendations.length > 0" class="section-wave" aria-hidden="true">
+        <svg viewBox="0 0 1440 60" preserveAspectRatio="none"><path d="M0,35 C240,55 480,10 720,30 C960,50 1200,15 1440,35 L1440,60 L0,60Z" fill="var(--tint-mint)"/></svg>
       </div>
 
       <!-- 「次に見るなら」レーン（おすすめ・代表作起点＝最終目標の直接回答） -->
@@ -586,6 +623,11 @@
             </span>
           </a>
         </div>
+      </div>
+
+      <!-- セクション区切り wave -->
+      <div v-if="collaborators.length > 0 || collabStudios.length > 0" class="section-wave" aria-hidden="true">
+        <svg viewBox="0 0 1440 60" preserveAspectRatio="none"><path d="M0,35 C240,55 480,10 720,30 C960,50 1200,15 1440,35 L1440,60 L0,60Z" fill="var(--tint-lav)"/></svg>
       </div>
 
       <!-- よく組むクリエイター / 制作会社 -->
@@ -626,8 +668,18 @@
       </div>
     </div>
 
-    <!-- Footer: AniList 非公式帰属（必須・常時） + アフィリエイト開示（タグ有効時のみ） -->
+    <!-- フッター区切り wave -->
+    <div class="section-wave section-wave--footer" aria-hidden="true">
+      <svg viewBox="0 0 1440 60" preserveAspectRatio="none"><path d="M0,35 C240,55 480,10 720,30 C960,50 1200,15 1440,35 L1440,60 L0,60Z" fill="var(--tint-pink)"/></svg>
+    </div>
+
     <footer class="site-footer">
+      <div class="footer-share">
+        <button type="button" class="footer-share-btn" @click="shareApp">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>
+          このアプリを共有
+        </button>
+      </div>
       <p class="footer-attribution">
         Data from
         <a href="https://anilist.co" target="_blank" rel="noopener">AniList</a>.
@@ -1018,7 +1070,7 @@ const SEARCH_TABS_PRIMARY: { mode: SearchMode; label: string }[] = [
 const SEARCH_TABS_SECONDARY: { mode: SearchMode; label: string }[] = [
   { mode: 'writing', label: '脚本' },
   { mode: 'chardesign', label: 'キャラ原案' },
-  { mode: 'music', label: '音楽' },
+  { mode: 'music', label: '劇伴' },
   { mode: 'theme-lyrics', label: '作詞' },
   { mode: 'theme-compose', label: '作曲・編曲' },
   { mode: 'studio', label: '制作会社' },
@@ -1027,6 +1079,28 @@ const SEARCH_TABS_SECONDARY: { mode: SearchMode; label: string }[] = [
 // 全件配列として参照しているので、合成版を維持する。
 const SEARCH_TABS: { mode: SearchMode; label: string }[] = [...SEARCH_TABS_PRIMARY, ...SEARCH_TABS_SECONDARY]
 const SECONDARY_MODES = new Set<SearchMode>(SEARCH_TABS_SECONDARY.map(t => t.mode))
+
+const SAMPLE_SUGGESTIONS: { mode: SearchMode; name: string; label: string }[] = [
+  { mode: 'creator', name: '井上雄彦', label: '井上雄彦' },
+  { mode: 'director', name: '新海誠', label: '新海誠' },
+  { mode: 'voice', name: '花澤香菜', label: '花澤香菜' },
+  { mode: 'studio', name: 'MAPPA', label: 'MAPPA' },
+]
+
+const MODE_ICONS: Record<SearchMode, string> = {
+  creator: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1.5-4.5L17 4l3 3L8.5 18.5z"/><path d="M15 6l3 3"/></svg>',
+  title: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5c2-1 5-1 8 .5 3-1.5 6-1.5 8-.5v13c-2-1-5-1-8 .5-3-1.5-6-1.5-8-.5z"/><path d="M12 5.5v13"/></svg>',
+  director: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M2 12h20M7 2l3 5M14 2l3 5"/></svg>',
+  voice: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0014 0"/><path d="M12 17v4M8 21h8"/></svg>',
+  'theme-singer': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 12.9a5 5 0 10-3.9-3.9"/><path d="M15 12.9l-3.9-3.9-7.5 8.6a2 2 0 102.8 2.8l8.6-7.5"/></svg>',
+  writing: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg>',
+  chardesign: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="19" cy="13" r="2"/><circle cx="6" cy="12" r="3"/><circle cx="12" cy="19" r="2.5"/><path d="M12 2a10 10 0 0110 10h-4"/></svg>',
+  music: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="18" r="3"/><circle cx="18" cy="16" r="3"/><path d="M11 18V5l10-2v13"/></svg>',
+  'theme-lyrics': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5z"/></svg>',
+  'theme-compose': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 20V4M10 20V4M14 20V4M18 20V4"/><path d="M8 4v9M12 4v9M16 4v9"/></svg>',
+  studio: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 21v-4h6v4M9 9h0M15 9h0M9 13h0M15 13h0"/></svg>',
+}
+function modeIconSvg(mode: SearchMode): string { return MODE_ICONS[mode] ?? '' }
 const staffCandidates = ref<StaffCandidate[]>([])
 const mediaCandidates = ref<MediaCandidate[]>([])   // 作品名モードの候補
 const studioCandidates = ref<StudioCandidate[]>([]) // 制作会社モードの候補
@@ -1209,6 +1283,7 @@ const RECENT_LABELS: Record<RecentKind, string> = {
 // 欠けても空リストへ畳んでアプリは生かす。
 const currentRecent = computed<RecentItem[]>(() => recentByKind.value[searchMode.value] ?? [])
 const recentLabel = computed(() => RECENT_LABELS[searchMode.value])
+const hasAnyRecent = computed(() => Object.values(recentByKind.value).some(list => list.length > 0))
 
 // 入力が空でフォーカス中、かつ現モードの最近見たがあればドロップダウンに recent を出す。
 const showRecent = computed(() =>
@@ -1677,6 +1752,13 @@ async function searchStaff() {
     debounceTimer = null
   }
   await executeSearch()
+}
+
+function trySample(s: typeof SAMPLE_SUGGESTIONS[0]) {
+  searchMode.value = s.mode
+  if (SECONDARY_MODES.has(s.mode)) moreTabsOpen.value = true
+  setQuerySilently(s.name)
+  searchStaff()
 }
 
 // Live search: debounced watch
@@ -2983,7 +3065,19 @@ async function selectStaffById(id: number) {
   }
 }
 
-// X（旧 Twitter）へ現在の作者ページを共有する（Web Intent）
+async function shareApp() {
+  const url = config.public.siteUrl as string || window.location.origin
+  const title = 'Creator Discovery — アニメをクリエイターから探す'
+  if (navigator.share) {
+    try { await navigator.share({ title, url }) } catch {}
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(url)
+    alert('URLをコピーしました')
+  } catch {}
+}
+
 function shareOnX() {
   const name = selectedStaff.value
     ? (selectedStaff.value.name.native || selectedStaff.value.name.full)
