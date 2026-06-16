@@ -44,7 +44,21 @@ const SITE_URL = config.public.siteUrl as string
 const title = computed(() => `${staffName.value}の作曲・編曲作品 — Creator Discovery`)
 const desc = computed(() => `${staffName.value}が作曲・編曲を担当したアニメ一覧。高評価順・おすすめ付き。`)
 
-useHead({ title })
+useHead({
+  title,
+  link: [{ rel: 'canonical', href: `${SITE_URL}/theme-compose/${id}` }],
+  script: [{
+    type: 'application/ld+json',
+    innerHTML: JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'ProfilePage',
+      name: title.value,
+      description: desc.value,
+      url: `${SITE_URL}/theme-compose/${id}`,
+      mainEntity: { '@type': 'Person', name: staffName.value, jobTitle: 'Composer/Arranger' },
+    }),
+  }],
+})
 useSeoMeta({
   description: desc,
   ogTitle: title,

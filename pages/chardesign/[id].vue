@@ -14,9 +14,9 @@
       </a>
     </header>
     <main class="seo-main">
-      <h1>{{ staffName }}の出演作</h1>
-      <p class="seo-desc">{{ staffName }}が出演したアニメ作品一覧。高評価順・おすすめ付き。Creator Discoveryで見つけよう。</p>
-      <a :href="`/?view=voice&id=${id}`" class="seo-cta">出演作を見る →</a>
+      <h1>{{ staffName }}のキャラクターデザイン作品</h1>
+      <p class="seo-desc">{{ staffName }}がキャラクターデザインを手がけたアニメ一覧。高評価順・おすすめ付き。Creator Discoveryで見つけよう。</p>
+      <a :href="`/?view=chardesign&id=${id}`" class="seo-cta">作品を見る →</a>
     </main>
   </div>
 </template>
@@ -37,16 +37,16 @@ const { data: nameCache } = await useAsyncData('seo-names', async () => {
 
 const staffName = computed(() => {
   const n = nameCache.value?.names?.[id]
-  return n?.native || n?.full || '声優'
+  return n?.native || n?.full || 'キャラクターデザイナー'
 })
 
 const SITE_URL = config.public.siteUrl as string
-const title = computed(() => `${staffName.value}の出演作 — Creator Discovery`)
-const desc = computed(() => `${staffName.value}が出演したアニメ作品一覧。Creator Discoveryで見つけよう。`)
+const title = computed(() => `${staffName.value}のキャラデザ作品 — Creator Discovery`)
+const desc = computed(() => `${staffName.value}がキャラクターデザインを担当したアニメ一覧。高評価順・おすすめ付き。`)
 
 useHead({
   title,
-  link: [{ rel: 'canonical', href: `${SITE_URL}/voice/${id}` }],
+  link: [{ rel: 'canonical', href: `${SITE_URL}/chardesign/${id}` }],
   script: [{
     type: 'application/ld+json',
     innerHTML: JSON.stringify({
@@ -54,8 +54,8 @@ useHead({
       '@type': 'ProfilePage',
       name: title.value,
       description: desc.value,
-      url: `${SITE_URL}/voice/${id}`,
-      mainEntity: { '@type': 'Person', name: staffName.value, jobTitle: 'Voice Actor' },
+      url: `${SITE_URL}/chardesign/${id}`,
+      mainEntity: { '@type': 'Person', name: staffName.value, jobTitle: 'Character Designer' },
     }),
   }],
 })
@@ -63,13 +63,13 @@ useSeoMeta({
   description: desc,
   ogTitle: title,
   ogDescription: desc,
-  ogUrl: `${SITE_URL}/voice/${id}`,
+  ogUrl: `${SITE_URL}/chardesign/${id}`,
   ogImage: `${SITE_URL}/og-image.png`,
   twitterCard: 'summary_large_image',
 })
 
 if (import.meta.client) {
-  navigateTo({ path: '/', query: { view: 'voice', id: String(id) } }, { replace: true })
+  navigateTo({ path: '/', query: { view: 'chardesign', id: String(id) } }, { replace: true })
 }
 </script>
 

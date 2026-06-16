@@ -41,7 +41,21 @@ const SITE_URL = config.public.siteUrl as string
 const title = computed(() => `${studioName.value}の制作作品 — Creator Discovery`)
 const desc = computed(() => `${studioName.value}が制作したアニメ一覧。高評価順の並べ替え・おすすめ付き。`)
 
-useHead({ title })
+useHead({
+  title,
+  link: [{ rel: 'canonical', href: `${SITE_URL}/studio/${id}` }],
+  script: [{
+    type: 'application/ld+json',
+    innerHTML: JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'ProfilePage',
+      name: title.value,
+      description: desc.value,
+      url: `${SITE_URL}/studio/${id}`,
+      mainEntity: { '@type': 'Organization', name: studioName.value },
+    }),
+  }],
+})
 useSeoMeta({
   description: desc,
   ogTitle: title,

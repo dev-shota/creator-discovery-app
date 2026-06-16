@@ -44,7 +44,21 @@ const SITE_URL = config.public.siteUrl as string
 const title = computed(() => `${staffName.value}の音楽担当作品 — Creator Discovery`)
 const desc = computed(() => `${staffName.value}が音楽を担当したアニメ一覧。高評価順・おすすめ付き。`)
 
-useHead({ title })
+useHead({
+  title,
+  link: [{ rel: 'canonical', href: `${SITE_URL}/music/${id}` }],
+  script: [{
+    type: 'application/ld+json',
+    innerHTML: JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'ProfilePage',
+      name: title.value,
+      description: desc.value,
+      url: `${SITE_URL}/music/${id}`,
+      mainEntity: { '@type': 'Person', name: staffName.value, jobTitle: 'Composer' },
+    }),
+  }],
+})
 useSeoMeta({
   description: desc,
   ogTitle: title,

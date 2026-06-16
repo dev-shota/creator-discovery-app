@@ -44,7 +44,21 @@ const SITE_URL = config.public.siteUrl as string
 const title = computed(() => `${staffName.value}のOP/ED出演作品 — Creator Discovery`)
 const desc = computed(() => `${staffName.value}がOP/EDを歌ったアニメ一覧。高評価順・おすすめ付き。`)
 
-useHead({ title })
+useHead({
+  title,
+  link: [{ rel: 'canonical', href: `${SITE_URL}/theme-singer/${id}` }],
+  script: [{
+    type: 'application/ld+json',
+    innerHTML: JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'ProfilePage',
+      name: title.value,
+      description: desc.value,
+      url: `${SITE_URL}/theme-singer/${id}`,
+      mainEntity: { '@type': 'Person', name: staffName.value, jobTitle: 'Singer' },
+    }),
+  }],
+})
 useSeoMeta({
   description: desc,
   ogTitle: title,

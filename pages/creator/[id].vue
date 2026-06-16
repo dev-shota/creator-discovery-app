@@ -44,7 +44,21 @@ const SITE_URL = config.public.siteUrl as string
 const title = computed(() => `${staffName.value}の作品 — Creator Discovery`)
 const desc = computed(() => `${staffName.value}の漫画・アニメ作品一覧。高評価順・おすすめ付き。Creator Discoveryで見つけよう。`)
 
-useHead({ title })
+useHead({
+  title,
+  link: [{ rel: 'canonical', href: `${SITE_URL}/creator/${id}` }],
+  script: [{
+    type: 'application/ld+json',
+    innerHTML: JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'ProfilePage',
+      name: title.value,
+      description: desc.value,
+      url: `${SITE_URL}/creator/${id}`,
+      mainEntity: { '@type': 'Person', name: staffName.value },
+    }),
+  }],
+})
 useSeoMeta({
   description: desc,
   ogTitle: title,

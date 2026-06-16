@@ -44,7 +44,21 @@ const SITE_URL = config.public.siteUrl as string
 const title = computed(() => `${staffName.value}の監督作品 — Creator Discovery`)
 const desc = computed(() => `${staffName.value}が監督したアニメ作品一覧。Creator Discoveryで見つけよう。`)
 
-useHead({ title })
+useHead({
+  title,
+  link: [{ rel: 'canonical', href: `${SITE_URL}/director/${id}` }],
+  script: [{
+    type: 'application/ld+json',
+    innerHTML: JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'ProfilePage',
+      name: title.value,
+      description: desc.value,
+      url: `${SITE_URL}/director/${id}`,
+      mainEntity: { '@type': 'Person', name: staffName.value, jobTitle: 'Anime Director' },
+    }),
+  }],
+})
 useSeoMeta({
   description: desc,
   ogTitle: title,

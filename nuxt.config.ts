@@ -28,7 +28,7 @@ export default defineNuxtConfig({
         const staffIds: number[] = (res?.data?.creators?.staff ?? []).map((s: any) => s.id)
         const studioIds: number[] = (res?.data?.studios?.studios ?? []).map((s: any) => s.id)
 
-        const staffViews = ['creator', 'director', 'voice', 'music', 'theme-singer', 'theme-lyrics', 'theme-compose']
+        const staffViews = ['creator', 'director', 'voice', 'writing', 'chardesign', 'music', 'theme-singer', 'theme-lyrics', 'theme-compose']
         for (const id of staffIds) {
           for (const v of staffViews) ctx.routes.add(`/${v}/${id}`)
         }
@@ -78,6 +78,10 @@ export default defineNuxtConfig({
         { name: 'apple-mobile-web-app-capable', content: 'yes' },
         { name: 'apple-mobile-web-app-status-bar-style', content: 'default' },
       ],
+      script: [{
+        innerHTML: `(function(){try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&matchMedia('(prefers-color-scheme:dark)').matches))document.documentElement.classList.add('dark')}catch(e){if(matchMedia('(prefers-color-scheme:dark)').matches)document.documentElement.classList.add('dark')}})()`,
+        tagPosition: 'head',
+      }],
       link: [
         { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
         { rel: 'apple-touch-icon', href: '/favicon.svg' },
