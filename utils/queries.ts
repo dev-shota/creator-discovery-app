@@ -54,7 +54,7 @@ export const WORKS_QUERY = `
   query($id: Int, $p: Int) {
     Staff(id: $id) {
       name { full native }
-      staffMedia(type: MANGA, sort: SCORE_DESC, page: $p, perPage: 50) {
+      staffMedia(sort: SCORE_DESC, page: $p, perPage: 50) {
         pageInfo { hasNextPage }
         edges {
           staffRole
