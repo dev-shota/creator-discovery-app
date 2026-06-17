@@ -923,6 +923,7 @@ a {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+  position: relative;
 }
 
 .share-btn {
@@ -943,6 +944,36 @@ a {
   transform: translateY(-1px);
   opacity: 0.9;
 }
+
+.share-btn--anchor {
+  background: var(--bg-soft);
+  font-size: 13px;
+  padding: 7px 14px;
+}
+
+.works-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.copy-toast {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 6px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 13px;
+  padding: 6px 14px;
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+}
+.toast-enter-active, .toast-leave-active { transition: opacity 0.25s; }
+.toast-enter-from, .toast-leave-to { opacity: 0; }
 
 /* ── Works controls（並び順トグル＋件数） ── */
 .works-controls {
@@ -1316,6 +1347,10 @@ button.studio-badge {
 
 .work-card-buy:hover {
   text-decoration: underline;
+}
+
+.work-card-buy--anilist {
+  color: var(--teal-text, var(--teal));
 }
 
 /* アフィリエイト有効時の「広告」ラベル（ステマ規制: 広告である旨を CTA に明示）。

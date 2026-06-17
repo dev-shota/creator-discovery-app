@@ -299,7 +299,7 @@
               @click="selectRecent(r)"
             >{{ r.name }}</button>
           </div>
-          <div v-else-if="!selectedStaff && !selectedStudio && mediaAuthorChoices.length === 0 && !hasAnyRecent" class="recent-chips sample-chips">
+          <div v-if="!selectedStaff && !selectedStudio && mediaAuthorChoices.length === 0 && !currentRecent?.length" class="recent-chips sample-chips">
             <span class="recent-chips-label">試してみる</span>
             <button
               v-for="s in SAMPLE_SUGGESTIONS"
@@ -380,12 +380,13 @@
           {{ worksHeading }}
           <span v-if="worksLoading" class="works-loading-indicator"><NuxtImg src="/mascot-loading.png" alt="" class="loading-mascot" width="32" height="32" format="webp" />{{ worksLoadedCount > 0 ? `読み込み中… ${worksLoadedCount}件` : '読み込み中…' }}</span>
         </h2>
-        <button
-          v-if="(selectedStaff || selectedStudio) && !worksLoading && filteredWorks.length > 0"
-          type="button"
-          class="share-btn"
-          @click="shareOnX"
-        >X でシェア</button>
+        <div v-if="(selectedStaff || selectedStudio) && !worksLoading && filteredWorks.length > 0" class="works-actions">
+          <button type="button" class="share-btn" @click="copyUrl" title="URLをコピー">🔗 コピー</button>
+          <button type="button" class="share-btn" @click="shareOnX">X でシェア</button>
+          <button v-if="recommendations.length > 0" type="button" class="share-btn share-btn--anchor" @click="scrollToRecs">おすすめ ↓</button>
+          <button v-if="collaborators.length > 0 || collabStudios.length > 0 || studioKeyStaff.length > 0" type="button" class="share-btn share-btn--anchor" @click="scrollToCollabs">コラボ ↓</button>
+        </div>
+        <Transition name="toast"><span v-if="copyToast" class="copy-toast">URLをコピーしました</span></Transition>
       </div>
 
       <p v-if="worksError" class="status-error">{{ worksError }}</p>
@@ -605,11 +606,19 @@
             </div>
 
             <a
+              v-if="isReadableFormat(edge.node.format)"
               :href="purchaseLink(edge.node.title)"
               target="_blank"
               :rel="purchaseRel"
               class="work-card-buy"
             ><span v-if="affiliateActive" class="ad-badge">広告</span>Amazon で探す</a>
+            <a
+              v-else
+              :href="`https://anilist.co/${edge.node.type === 'ANIME' ? 'anime' : 'manga'}/${edge.node.id}`"
+              target="_blank"
+              rel="noopener"
+              class="work-card-buy work-card-buy--anilist"
+            >AniList で詳細</a>
           </div>
         </div>
       </div>
@@ -942,7 +951,11 @@ useHead({
 
 // ── AniList gateway, rate limiting, cache: composables/useAniList.ts ──────
 
-// 作品タイトルから購入導線（Amazon.co.jp 検索）を生成。タグが空なら中立リンク。
+const READABLE_FORMATS = new Set(['MANGA', 'NOVEL', 'ONE_SHOT'])
+function isReadableFormat(format: string | null): boolean {
+  return format != null && READABLE_FORMATS.has(format)
+}
+
 function purchaseLink(title: WorkEdge['node']['title']): string {
   const q = title.native || title.romaji || title.english || ''
   const url = `https://www.amazon.co.jp/s?k=${encodeURIComponent(q)}`
@@ -985,8 +998,14 @@ const SECONDARY_MODES = new Set<SearchMode>(SEARCH_TABS_SECONDARY.map(t => t.mod
 const SAMPLE_SUGGESTIONS: { mode: SearchMode; name: string; label: string }[] = [
   { mode: 'creator', name: '井上雄彦', label: '井上雄彦' },
   { mode: 'director', name: '新海誠', label: '新海誠' },
+  { mode: 'director', name: '山田尚子', label: '山田尚子' },
   { mode: 'voice', name: '花澤香菜', label: '花澤香菜' },
+  { mode: 'voice', name: '神谷浩史', label: '神谷浩史' },
+  { mode: 'music', name: '菅野よう子', label: '菅野よう子' },
+  { mode: 'writing', name: '岡田麿里', label: '岡田麿里' },
+  { mode: 'chardesign', name: '貞本義行', label: '貞本義行' },
   { mode: 'studio', name: 'MAPPA', label: 'MAPPA' },
+  { mode: 'studio', name: '京都アニメーション', label: '京アニ' },
 ]
 
 const MODE_ICONS: Record<SearchMode, string> = {
@@ -2579,6 +2598,21 @@ async function selectStaffById(id: number) {
   }
 }
 
+const copyToast = ref(false)
+async function copyUrl() {
+  try {
+    await navigator.clipboard.writeText(window.location.href)
+    copyToast.value = true
+    setTimeout(() => { copyToast.value = false }, 2000)
+  } catch {}
+}
+function scrollToRecs() {
+  document.querySelector('.recs')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+function scrollToCollabs() {
+  document.querySelector('.collabs-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
 async function shareApp() {
   const url = config.public.siteUrl as string || window.location.origin
   const title = 'Creator Discovery — アニメをクリエイターから探す'
@@ -2597,14 +2631,21 @@ function shareOnX() {
     ? (selectedStaff.value.name.native || selectedStaff.value.name.full)
     : selectedStudio.value?.name
   if (!name) return
-  const suffix = selectedStudio.value ? 'の制作作品'
-    : selectedStaffKind.value === 'director' ? 'の監督作品'
-    : selectedStaffKind.value === 'voice' ? 'の出演作'
-    : selectedStaffKind.value === 'staffrole' ? `の${selectedRoleLabel.value}担当作`
-    : 'の作品'
-  const text = `「${name}」${suffix}｜Creator Discovery`
+  const count = displayWorks.value.length
+  const text = selectedStudio.value
+    ? `${name}の制作アニメ、あなたのベストは？ 全${count}作スコア付き一覧 →`
+    : selectedStaffKind.value === 'director'
+    ? `${name}の最高傑作はどれ？ 全${count}作スコア付き一覧 →`
+    : selectedStaffKind.value === 'voice'
+    ? `${name}の出演作で一番好きなのは？ ${count}作を一覧で →`
+    : MUSIC_MODES.has(searchMode.value)
+    ? `${name}の劇伴・主題歌で一番好きなのは？ →`
+    : selectedStaffKind.value === 'staffrole'
+    ? `${name}の${selectedRoleLabel.value}担当作で推しはどれ？ →`
+    : `${name}の作品で一番好きなのは？ →`
+  const hashtags = '#アニメ #CreatorDiscovery'
   const url = window.location.href
-  const intent = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`
+  const intent = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text + '\n' + hashtags)}&url=${encodeURIComponent(url)}`
   window.open(intent, '_blank', 'noopener')
 }
 

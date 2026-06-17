@@ -31,6 +31,8 @@ export default defineNuxtConfig({
         signal: AbortSignal.timeout(15000),
       }).then(r => r.json())
 
+      const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
       try {
         const res: any = await gql(`{
           creators: Page(perPage: 50) { staff(sort: FAVOURITES_DESC) { id } }
@@ -46,13 +48,17 @@ export default defineNuxtConfig({
         for (const id of studioIds) ctx.routes.add(`/studio/${id}`)
         console.log(`[prerender] Added ${staffIds.length * staffViews.length} staff + ${studioIds.length} studio routes`)
 
-        const names: Record<string, { full: string; native: string | null }> = {}
+        const names: Record<string, { full: string; native: string | null; image?: string }> = {}
         const studioNames: Record<string, string> = {}
+        const staffWorks: Record<string, { title: string; score: number | null; year: number | null; format: string | null; genres: string[] }[]> = {}
+        const studioWorks: Record<string, { title: string; score: number | null; year: number | null; format: string | null; genres: string[] }[]> = {}
 
         for (let i = 0; i < staffIds.length; i += 25) {
           const batch = staffIds.slice(i, i + 25)
-          const r: any = await gql(`{ Page(perPage:25) { staff(id_in:[${batch}]) { id name { full native } } } }`)
-          for (const s of r?.data?.Page?.staff ?? []) names[s.id] = s.name
+          const r: any = await gql(`{ Page(perPage:25) { staff(id_in:[${batch}]) { id name { full native } image { medium } } } }`)
+          for (const s of r?.data?.Page?.staff ?? []) {
+            names[s.id] = { full: s.name.full, native: s.name.native, image: s.image?.medium || undefined }
+          }
         }
         for (let i = 0; i < studioIds.length; i += 25) {
           const batch = studioIds.slice(i, i + 25)
@@ -60,10 +66,70 @@ export default defineNuxtConfig({
           for (const s of r?.data?.Page?.studios ?? []) studioNames[s.id] = s.name
         }
 
+        // Fetch top 5 works per staff (batched 5 per query via aliases)
+        for (let i = 0; i < staffIds.length; i += 5) {
+          const batch = staffIds.slice(i, i + 5)
+          const aliases = batch.map(id =>
+            `s${id}: Staff(id:${id}) { staffMedia(sort:POPULARITY_DESC,perPage:5) { nodes { title { native romaji } averageScore startDate { year } format genres } } }`
+          ).join('\n')
+          try {
+            const r: any = await gql(`{ ${aliases} }`)
+            for (const id of batch) {
+              const nodes = r?.data?.[`s${id}`]?.staffMedia?.nodes ?? []
+              const seen = new Set<string>()
+              staffWorks[id] = nodes.filter((n: any) => {
+                const key = `${n.title?.native || n.title?.romaji || ''}_${n.startDate?.year ?? ''}_${n.format ?? ''}`
+                if (seen.has(key)) return false
+                seen.add(key)
+                return true
+              }).map((n: any) => ({
+                title: n.title?.native || n.title?.romaji || '',
+                romaji: n.title?.romaji || '',
+                score: n.averageScore ?? null,
+                year: n.startDate?.year ?? null,
+                format: n.format ?? null,
+                genres: (n.genres ?? []).slice(0, 3),
+              }))
+            }
+          } catch { /* rate limit or error — skip batch, works will be empty */ }
+          if (i + 5 < staffIds.length) await sleep(700)
+        }
+        console.log(`[prerender] Fetched works for ${Object.keys(staffWorks).length} staff`)
+
+        // Fetch top 5 works per studio (batched 5 per query)
+        for (let i = 0; i < studioIds.length; i += 5) {
+          const batch = studioIds.slice(i, i + 5)
+          const aliases = batch.map(id =>
+            `st${id}: Studio(id:${id}) { media(sort:POPULARITY_DESC,perPage:5,isMain:true) { nodes { title { native romaji } averageScore startDate { year } format genres } } }`
+          ).join('\n')
+          try {
+            const r: any = await gql(`{ ${aliases} }`)
+            for (const id of batch) {
+              const nodes = r?.data?.[`st${id}`]?.media?.nodes ?? []
+              const seen = new Set<string>()
+              studioWorks[id] = nodes.filter((n: any) => {
+                const key = `${n.title?.native || n.title?.romaji || ''}_${n.startDate?.year ?? ''}_${n.format ?? ''}`
+                if (seen.has(key)) return false
+                seen.add(key)
+                return true
+              }).map((n: any) => ({
+                title: n.title?.native || n.title?.romaji || '',
+                romaji: n.title?.romaji || '',
+                score: n.averageScore ?? null,
+                year: n.startDate?.year ?? null,
+                format: n.format ?? null,
+                genres: (n.genres ?? []).slice(0, 3),
+              }))
+            }
+          } catch { /* skip batch */ }
+          if (i + 5 < studioIds.length) await sleep(700)
+        }
+        console.log(`[prerender] Fetched works for ${Object.keys(studioWorks).length} studios`)
+
         const { writeFileSync } = await import('node:fs')
         const { resolve } = await import('node:path')
-        writeFileSync(resolve('public/_seo-names.json'), JSON.stringify({ names, studioNames }), 'utf-8')
-        console.log(`[prerender] Cached ${Object.keys(names).length} staff + ${Object.keys(studioNames).length} studio names`)
+        writeFileSync(resolve('public/_seo-names.json'), JSON.stringify({ names, studioNames, staffWorks, studioWorks }), 'utf-8')
+        console.log(`[prerender] Cached ${Object.keys(names).length} staff + ${Object.keys(studioNames).length} studio names + works`)
 
         const siteUrl = 'https://creator-discovery-app.devshota-works.workers.dev'
         const allRoutes = ['/']
@@ -94,6 +160,8 @@ export default defineNuxtConfig({
         tagPosition: 'head',
       }],
       link: [
+        { rel: 'alternate', hreflang: 'ja', href: 'https://creator-discovery-app.devshota-works.workers.dev/' },
+        { rel: 'alternate', hreflang: 'x-default', href: 'https://creator-discovery-app.devshota-works.workers.dev/' },
         { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
         { rel: 'apple-touch-icon', href: '/favicon.svg' },
         { rel: 'manifest', href: '/manifest.json' },
