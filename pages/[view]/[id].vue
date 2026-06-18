@@ -3,12 +3,7 @@
     <header class="topbar">
       <a class="brand" href="/">
         <span class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 64 64" width="32" height="32">
-            <rect width="64" height="64" rx="16" fill="#ed3a8c" />
-            <circle cx="50" cy="15" r="6" fill="#eff33c" />
-            <circle cx="28" cy="30" r="12" fill="none" stroke="#fff" stroke-width="5" />
-            <line x1="37" y1="39" x2="49" y2="51" stroke="#fff" stroke-width="6" stroke-linecap="round" />
-          </svg>
+          <img src="/logo-96.webp" alt="" width="32" height="32" />
         </span>
         <span class="brand-name">Creator Discovery</span>
       </a>

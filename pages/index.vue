@@ -12,12 +12,7 @@
     <header class="topbar">
       <a class="brand" href="/">
         <span class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 64 64" width="32" height="32">
-            <rect width="64" height="64" rx="16" fill="#ed3a8c" />
-            <circle cx="50" cy="15" r="6" fill="#eff33c" />
-            <circle cx="28" cy="30" r="12" fill="none" stroke="#fff" stroke-width="5" />
-            <line x1="37" y1="39" x2="49" y2="51" stroke="#fff" stroke-width="6" stroke-linecap="round" />
-          </svg>
+          <img src="/logo-96.webp" alt="" width="32" height="32" />
         </span>
         <span class="brand-name">Creator Discovery</span>
       </a>
@@ -1150,6 +1145,7 @@ const THEME_SINGER_PLACEHOLDER = 'OP/ED 歌手　例: LiSA / Ado / YOASOBI / 鈴
 const THEME_LYRICS_PLACEHOLDER = '作詞家　例: 畑亜貴 / 秋元康'
 const THEME_COMPOSE_PLACEHOLDER = '作曲・編曲　例: 神前暁 / ryo / 田中秀和'
 const STUDIO_PLACEHOLDER = '制作会社（アニメスタジオ）　例: MAPPA / ufotable / 京都アニメーション'
+const STAFF_PLACEHOLDER = 'アニメスタッフ（作画監督・演出 等）　例: 中村豊 / 吉原達也'
 const searchPlaceholder = computed(() =>
   searchMode.value === 'title' ? TITLE_PLACEHOLDER
     : searchMode.value === 'director' ? DIRECTOR_PLACEHOLDER
@@ -1161,6 +1157,7 @@ const searchPlaceholder = computed(() =>
     : searchMode.value === 'theme-lyrics' ? THEME_LYRICS_PLACEHOLDER
     : searchMode.value === 'theme-compose' ? THEME_COMPOSE_PLACEHOLDER
     : searchMode.value === 'studio' ? STUDIO_PLACEHOLDER
+    : searchMode.value === 'staff' ? STAFF_PLACEHOLDER
     : CREATOR_PLACEHOLDER
 )
 
