@@ -954,7 +954,9 @@ a {
 }
 
 .share-btn:disabled {
-  opacity: 0.4;
+  color: var(--mute);
+  border-color: var(--line);
+  border-style: dashed;
   cursor: default;
   transform: none;
 }
