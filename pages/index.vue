@@ -383,7 +383,7 @@
         <div v-if="(selectedStaff || selectedStudio) && !worksLoading && filteredWorks.length > 0" class="works-actions">
           <button type="button" class="share-btn" @click="copyUrl" title="URLをコピー">🔗 コピー</button>
           <button type="button" class="share-btn" @click="shareOnX">X でシェア</button>
-          <button v-if="collaborators.length > 0 || collabStudios.length > 0 || studioKeyStaff.length > 0" type="button" class="share-btn share-btn--anchor" @click="scrollToCollabs">コラボ ↓</button>
+          <button type="button" class="share-btn share-btn--anchor" :disabled="!(collaborators.length > 0 || collabStudios.length > 0 || studioKeyStaff.length > 0)" @click="scrollToCollabs">コラボ ↓</button>
         </div>
         <Transition name="toast"><span v-if="copyToast" class="copy-toast">URLをコピーしました</span></Transition>
       </div>
