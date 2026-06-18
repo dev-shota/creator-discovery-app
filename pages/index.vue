@@ -593,7 +593,7 @@
               <span v-for="c in edge.characters.slice(0, 3)" :key="c.id" class="char-tag">{{ c.name }}</span>
             </div>
 
-            <!-- アニメ化スタジオ（作者モード） -->
+            <!-- アニメ化スタジオ + アニメ視聴リンク（作者モード） -->
             <div v-if="studioBadges[edge.node.id]?.length" class="work-card-studios">
               <span class="work-card-studios-label">アニメ化</span>
               <span v-for="name in visibleStudios(edge.node.id)" :key="name" class="studio-badge">{{ name }}</span>
@@ -603,6 +603,22 @@
                 class="studio-badge studio-badge-more"
                 @click="toggleStudios(edge.node.id)"
               >{{ expandedStudios.has(edge.node.id) ? '閉じる' : '+' + (studioBadges[edge.node.id].length - 2) }}</button>
+            </div>
+            <div v-if="animeAdaptations(edge).length" class="work-card-anime-links">
+              <a
+                v-for="a in visibleAnimeAdaptations(edge)"
+                :key="a.id"
+                :href="a.url"
+                target="_blank"
+                rel="noopener"
+                class="work-card-anime-link"
+              >▶ {{ a.label }}</a>
+              <button
+                v-if="animeAdaptations(edge).length > ANIME_LINKS_COLLAPSED"
+                type="button"
+                class="work-card-anime-toggle"
+                @click="toggleAnimeLinks(edge.node.id)"
+              >{{ expandedAnimeLinks.has(edge.node.id) ? '閉じる' : `他${animeAdaptations(edge).length - ANIME_LINKS_COLLAPSED}件を表示` }}</button>
             </div>
 
             <a
@@ -1015,10 +1031,10 @@ const MODE_ICONS: Record<SearchMode, string> = {
   voice: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0014 0"/><path d="M12 17v4M8 21h8"/></svg>',
   'theme-singer': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 12.9a5 5 0 10-3.9-3.9"/><path d="M15 12.9l-3.9-3.9-7.5 8.6a2 2 0 102.8 2.8l8.6-7.5"/></svg>',
   writing: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg>',
-  chardesign: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="19" cy="13" r="2"/><circle cx="6" cy="12" r="3"/><circle cx="12" cy="19" r="2.5"/><path d="M12 2a10 10 0 0110 10h-4"/></svg>',
+  chardesign: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>',
   music: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="18" r="3"/><circle cx="18" cy="16" r="3"/><path d="M11 18V5l10-2v13"/></svg>',
   'theme-lyrics': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5z"/></svg>',
-  'theme-compose': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 20V4M10 20V4M14 20V4M18 20V4"/><path d="M8 4v9M12 4v9M16 4v9"/></svg>',
+  'theme-compose': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M4 20V10M9 20V4M14 20V12M19 20V7"/></svg>',
   studio: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 21v-4h6v4M9 9h0M15 9h0M9 13h0M15 13h0"/></svg>',
 }
 function modeIconSvg(mode: SearchMode): string { return MODE_ICONS[mode] ?? '' }
@@ -1090,6 +1106,34 @@ const expandedStudios = ref<Set<number>>(new Set())
 function visibleStudios(id: number): string[] {
   const all = studioBadges.value[id] ?? []
   return expandedStudios.value.has(id) ? all : all.slice(0, 2)
+}
+
+function animeAdaptations(edge: WorkEdge): { id: number; url: string; label: string }[] {
+  return (edge.node.relations?.edges ?? [])
+    .filter(r => r.relationType === 'ADAPTATION' && r.node.type === 'ANIME')
+    .map(r => {
+      const t = r.node.title
+      const name = t?.native || t?.romaji || ''
+      const year = r.node.startDate?.year ? `${r.node.startDate.year}` : ''
+      const fmt = r.node.format ? formatJp(r.node.format) : ''
+      const parts = [fmt, year].filter(Boolean).join(' ')
+      const label = name ? (parts ? `${name}（${parts}）` : name) : (parts || `anime/${r.node.id}`)
+      return { id: r.node.id, url: `https://anilist.co/anime/${r.node.id}`, label }
+    })
+}
+
+const ANIME_LINKS_COLLAPSED = 2
+const expandedAnimeLinks = ref<Set<number>>(new Set())
+
+function visibleAnimeAdaptations(edge: WorkEdge): { id: number; url: string; label: string }[] {
+  const all = animeAdaptations(edge)
+  return expandedAnimeLinks.value.has(edge.node.id) ? all : all.slice(0, ANIME_LINKS_COLLAPSED)
+}
+
+function toggleAnimeLinks(id: number) {
+  const next = new Set(expandedAnimeLinks.value)
+  next.has(id) ? next.delete(id) : next.add(id)
+  expandedAnimeLinks.value = next
 }
 
 function toggleStudios(id: number) {
@@ -1421,12 +1465,14 @@ const repWork = computed<WorkEdge | null>(() => {
   return best
 })
 
-// 隠れた名作: 高評価（≥78）だが人気が控えめ（セット最大人気の25%未満）。人気順では埋もれる「次の一本」。
+// 隠れた名作: 高評価（≥78）＋相対的に控えめ（最大人気の25%未満）＋絶対的にニッチ（5万未満）。
+const HIDDEN_GEM_POP_CAP = 50000
 const hiddenGemIds = computed<Set<number>>(() => {
   const maxPop = maxPopularity.value
   const ids = new Set<number>()
   for (const e of filteredForDisplay.value) {
-    if ((e.node.averageScore ?? 0) >= 78 && (e.node.popularity ?? 0) < 0.25 * maxPop) ids.add(e.node.id)
+    const pop = e.node.popularity ?? 0
+    if ((e.node.averageScore ?? 0) >= 78 && pop < 0.25 * maxPop && pop < HIDDEN_GEM_POP_CAP) ids.add(e.node.id)
   }
   return ids
 })

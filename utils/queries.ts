@@ -54,7 +54,7 @@ export const WORKS_QUERY = `
   query($id: Int, $p: Int) {
     Staff(id: $id) {
       name { full native }
-      staffMedia(sort: SCORE_DESC, page: $p, perPage: 50) {
+      staffMedia(type: MANGA, sort: SCORE_DESC, page: $p, perPage: 50) {
         pageInfo { hasNextPage }
         edges {
           staffRole
@@ -65,7 +65,7 @@ export const WORKS_QUERY = `
             coverImage { medium }
             siteUrl
             averageScore popularity genres episodes format status
-            relations { edges { relationType node { id type } } }
+            relations { edges { relationType node { id type title { romaji native } startDate { year } format } } }
           }
         }
       }

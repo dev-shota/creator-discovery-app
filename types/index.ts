@@ -61,7 +61,7 @@ export interface WorkEdge {
     format: string | null
     status: string | null
     relations: {
-      edges: { relationType: string; node: { id: number; type: string } }[]
+      edges: { relationType: string; node: { id: number; type: string; title?: { romaji: string | null; native: string | null }; startDate?: { year: number | null }; format?: string | null } }[]
     }
   }
 }
