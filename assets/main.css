@@ -2286,8 +2286,8 @@ button.studio-badge {
 .dark .rec-cover,
 .dark .collab-avatar { filter: brightness(0.92); }
 .dark .work-card:hover .work-card-cover,
-.dark .rec-card:hover .rec-cover,
 .dark .collab-card:hover .collab-avatar { filter: brightness(1); }
+.dark .share-btn { background: var(--bg-soft); border: 1px solid var(--line); }
 
 /* Theme toggle */
 .theme-toggle {
