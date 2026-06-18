@@ -369,7 +369,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="18" height="11" rx="2" /><path d="M3 9l3-4 3.5 0-3 4M9.5 9l3-4 3.5 0-3 4" /></svg>
         </span>
         <span class="how-name">次の一本</span>
-        <span class="how-desc">評価・おすすめで発見</span>
+        <span class="how-desc">評価・コラボで発見</span>
       </div>
     </section>
 
@@ -383,7 +383,6 @@
         <div v-if="(selectedStaff || selectedStudio) && !worksLoading && filteredWorks.length > 0" class="works-actions">
           <button type="button" class="share-btn" @click="copyUrl" title="URLをコピー">🔗 コピー</button>
           <button type="button" class="share-btn" @click="shareOnX">X でシェア</button>
-          <button v-if="recommendations.length > 0" type="button" class="share-btn share-btn--anchor" @click="scrollToRecs">おすすめ ↓</button>
           <button v-if="collaborators.length > 0 || collabStudios.length > 0 || studioKeyStaff.length > 0" type="button" class="share-btn share-btn--anchor" @click="scrollToCollabs">コラボ ↓</button>
         </div>
         <Transition name="toast"><span v-if="copyToast" class="copy-toast">URLをコピーしました</span></Transition>
@@ -677,39 +676,6 @@
         </button>
       </div>
 
-      <!-- セクション区切り wave -->
-      <div v-if="recommendations.length > 0" class="section-wave" aria-hidden="true">
-        <svg viewBox="0 0 1440 60" preserveAspectRatio="none"><path d="M0,35 C240,55 480,10 720,30 C960,50 1200,15 1440,35 L1440,60 L0,60Z" fill="var(--tint-mint)"/></svg>
-      </div>
-
-      <!-- 「次に見るなら」レーン（おすすめ・代表作起点＝最終目標の直接回答） -->
-      <div v-if="recommendations.length > 0" class="recs">
-        <h3 class="recs-title">
-          次に見るなら
-          <span v-if="recsAnchorTitle" class="recs-anchor">「{{ recsAnchorTitle }}」が好きなら</span>
-        </h3>
-        <div class="recs-rail">
-          <div
-            v-for="r in recommendations"
-            :key="r.id"
-            class="rec-card"
-          >
-            <a :href="r.siteUrl" target="_blank" rel="noopener" class="rec-card-link">
-              <NuxtImg v-if="r.coverImage?.medium" :src="r.coverImage.medium" :alt="displayTitle(r.title)" class="rec-cover" loading="lazy" />
-              <span v-else class="rec-cover rec-cover-fallback" aria-hidden="true">?</span>
-              <span class="rec-title">{{ displayTitle(r.title) }}</span>
-              <span class="rec-meta">
-                <span v-if="r.averageScore != null" class="rec-score">★{{ r.averageScore }}</span>
-                {{ r.year ?? '' }}
-              </span>
-            </a>
-            <button type="button" class="rec-chain-btn" title="この作品から次のおすすめを探す" @click="chainRecommendation(r)">
-              さらに →
-            </button>
-          </div>
-        </div>
-      </div>
-
       <!-- ═══ MusicBrainz ディスコグラフィー（音楽系モード時のみ）═══ -->
       <div v-if="(mbLoading || mbReleaseGroups.length > 0 || mbError) && MUSIC_MODES.has(searchMode)" class="mb-section">
         <div class="section-wave" aria-hidden="true">
@@ -856,7 +822,7 @@ import type {
   StaffCandidate, MediaCandidate, StudioCandidate, RecentItem, RecentKind,
   SearchMode, SortMode, RoleKey, ViewKind,
   WorkEdge, StudioWorkNode, VoiceEdge, MediaStaffEdge,
-  AuthorChoice, RecItem, CollabPerson, CollabStudio, StudioNode,
+  AuthorChoice, CollabPerson, CollabStudio, StudioNode,
   WorksController, SearchTab, SortTab,
 } from '~/types'
 
@@ -2120,8 +2086,6 @@ async function runWorksBatch(reset: boolean) {
     worksCursor = 1
     worksSort.value = DEFAULT_SORT // 新しい選択は初期=高評価順（「次に何を見るか」に効く）
     clearFilters()                 // 新しい選択はフィルタも初期化（前の人の条件を持ち越さない）
-    recommendations.value = []     // 「次に見るなら」レーンも一旦クリア（全件取得後に再取得）
-    recsAnchorTitle.value = ''
     worksLoading.value = true
     worksError.value = ''
     worksNotice.value = ''
@@ -2184,8 +2148,6 @@ async function runWorksBatch(reset: boolean) {
     if (worksHasMore.value && !worksNotice.value) {
       worksNotice.value = '件数が多いため一部のみ表示しています。「さらに読み込む」で続きを取得できます。'
     }
-    // 「次に見るなら」: 全件取得後、代表作のおすすめを読み込む（付加価値・失敗は無視）。
-    void loadRecommendations(pickRecAnchor(), ctl.seq)
   } catch (e) {
     // 自分（この呼び出し）が現役の時だけエラーを表示する。global worksCtl.seq でなく
     // local ctl.seq を見る＝stale な失敗が新しい選択の画面にエラーを書かない（レビュー#3）。
@@ -2222,8 +2184,6 @@ function clearSelection() {
   worksError.value = ''
   worksNotice.value = ''
   mediaAuthorChoices.value = []
-  recommendations.value = []
-  recsAnchorTitle.value = ''
   collaborators.value = []
   collabStudios.value = []
   clearFilters()
@@ -2652,9 +2612,6 @@ async function copyUrl() {
     setTimeout(() => { copyToast.value = false }, 2000)
   } catch {}
 }
-function scrollToRecs() {
-  document.querySelector('.recs')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
 function scrollToCollabs() {
   document.querySelector('.collabs-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
@@ -2779,102 +2736,6 @@ async function loadStudioBadges(works: WorkEdge[], mySeq: number) {
       }
       return
     }
-  }
-}
-
-const recommendations = ref<RecItem[]>([])
-const recsAnchorTitle = ref('') // 「『◯◯』が好きなら」の◯◯
-const recsLoading = ref(false)
-let recsSeq = 0
-
-// 推薦の起点（アンカー）= ロード済み全作品から評価×知名度が最大の1作（フィルタ非依存）。
-function pickRecAnchor(): WorkEdge | null {
-  let best: WorkEdge | null = null
-  let bestKey = -Infinity
-  let maxPop = 1
-  for (const e of filteredWorks.value) maxPop = Math.max(maxPop, e.node.popularity ?? 0)
-  for (const e of filteredWorks.value) {
-    if (e.node.averageScore == null) continue
-    const key = e.node.averageScore + 8 * ((e.node.popularity ?? 0) / maxPop)
-    if (key > bestKey) { bestKey = key; best = e }
-  }
-  return best
-}
-
-async function loadRecommendations(anchor: WorkEdge | null, mySeq: number) {
-  // stale な呼び出し（onBatch await 中に選択が変わった）が現在の選択の recs を消さないよう、
-  // クリアより前に staleness を確認する（Codex#1）。
-  if (mySeq !== selectSeq) return
-  recommendations.value = []
-  recsAnchorTitle.value = ''
-  if (!anchor) return
-  const my = ++recsSeq
-  recsLoading.value = true
-  try {
-    const data = await anilist<{
-      data: { Media: { recommendations: { nodes: { rating: number; mediaRecommendation: {
-        id: number; type: string
-        title: { native: string | null; romaji: string | null; english: string | null }
-        coverImage: { medium: string | null } | null; siteUrl: string
-        averageScore: number | null; startDate: { year: number | null } | null
-      } | null }[] } } }
-    }>(RECOMMENDATIONS_QUERY, { id: anchor.node.id })
-    if (my !== recsSeq || mySeq !== selectSeq) return
-    const ownIds = new Set(filteredWorks.value.map(e => e.node.id)) // 本人の作品は推薦から除く
-    const seen = new Set<number>()
-    const out: RecItem[] = []
-    for (const n of data?.data?.Media?.recommendations?.nodes ?? []) {
-      const m = n.mediaRecommendation
-      if (!m || seen.has(m.id) || ownIds.has(m.id)) continue
-      seen.add(m.id)
-      out.push({
-        id: m.id, type: m.type, title: m.title, coverImage: m.coverImage,
-        siteUrl: m.siteUrl, averageScore: m.averageScore, year: m.startDate?.year ?? null,
-      })
-      if (out.length >= 12) break
-    }
-    recommendations.value = out
-    recsAnchorTitle.value = displayTitle(anchor.node.title)
-  } catch {
-    // 推薦は付加価値。失敗は黙って省略。
-  } finally {
-    if (my === recsSeq) recsLoading.value = false
-  }
-}
-
-async function chainRecommendation(rec: RecItem) {
-  const my = ++recsSeq
-  recsLoading.value = true
-  recommendations.value = []
-  recsAnchorTitle.value = ''
-  try {
-    const data = await anilist<{
-      data: { Media: { recommendations: { nodes: { rating: number; mediaRecommendation: {
-        id: number; type: string
-        title: { native: string | null; romaji: string | null; english: string | null }
-        coverImage: { medium: string | null } | null; siteUrl: string
-        averageScore: number | null; startDate: { year: number | null } | null
-      } | null }[] } } }
-    }>(RECOMMENDATIONS_QUERY, { id: rec.id })
-    if (my !== recsSeq) return
-    const seen = new Set<number>([rec.id])
-    const out: RecItem[] = []
-    for (const n of data?.data?.Media?.recommendations?.nodes ?? []) {
-      const m = n.mediaRecommendation
-      if (!m || seen.has(m.id)) continue
-      seen.add(m.id)
-      out.push({
-        id: m.id, type: m.type, title: m.title, coverImage: m.coverImage,
-        siteUrl: m.siteUrl, averageScore: m.averageScore, year: m.startDate?.year ?? null,
-      })
-      if (out.length >= 12) break
-    }
-    recommendations.value = out
-    recsAnchorTitle.value = displayTitle(rec.title)
-  } catch {
-    // chain failure is non-critical
-  } finally {
-    if (my === recsSeq) recsLoading.value = false
   }
 }
 
