@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>OG Image Template — 1200×630</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=M+PLUS+Rounded+1c:wght@700;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    width: 1200px;
+    height: 630px;
+    overflow: hidden;
+    background: #fff;
+  }
+
+  .card {
+    position: relative;
+    width: 1200px;
+    height: 630px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 72px 80px;
+  }
+
+  /* decorative blobs — same palette as the app */
+  .blob {
+    position: absolute;
+    border-radius: 42% 58% 65% 35% / 55% 40% 60% 45%;
+    filter: blur(18px);
+    opacity: 0.30;
+  }
+  .b1 {
+    width: 320px; height: 320px;
+    top: -100px; left: -80px;
+    background: radial-gradient(circle at 45% 45%, #ed3a8c, #ff4fa0 50%, transparent 75%);
+    border-radius: 42% 58% 65% 35% / 55% 40% 60% 45%;
+  }
+  .b2 {
+    width: 260px; height: 260px;
+    top: 60px; right: -60px;
+    background: radial-gradient(circle at 55% 40%, #2dc7c0, #3dd4ce 50%, transparent 75%);
+    border-radius: 55% 45% 38% 62% / 48% 60% 40% 52%;
+  }
+  .b3 {
+    width: 220px; height: 220px;
+    bottom: -40px; left: 6%;
+    background: radial-gradient(circle at 50% 50%, #eff33c, #fff14b 50%, transparent 75%);
+    border-radius: 60% 40% 50% 50% / 45% 55%;
+  }
+  .b4 {
+    width: 280px; height: 280px;
+    bottom: 10px; right: 5%;
+    background: radial-gradient(circle at 40% 55%, #a78bfa, #8b7ae8 50%, transparent 75%);
+    border-radius: 48% 52% 45% 55% / 58% 42%;
+  }
+
+  .content {
+    position: relative;
+    z-index: 1;
+  }
+
+  .eyebrow {
+    font-family: 'Caveat', cursive;
+    font-size: 38px;
+    font-weight: 700;
+    color: #ed3a8c;
+    display: inline-block;
+    transform: rotate(-2deg);
+    margin-bottom: 8px;
+    line-height: 1;
+  }
+
+  .heading {
+    font-family: 'M PLUS Rounded 1c', 'Zen Kaku Gothic New', sans-serif;
+    font-weight: 800;
+    font-size: 58px;
+    color: #2a2a33;
+    line-height: 1.22;
+    letter-spacing: 0.01em;
+    margin-bottom: 20px;
+  }
+
+  .sub {
+    font-family: 'Zen Kaku Gothic New', sans-serif;
+    font-size: 24px;
+    color: #4a4a56;
+    line-height: 1.6;
+    max-width: 760px;
+  }
+
+  .footer {
+    position: absolute;
+    bottom: 52px;
+    left: 80px;
+    font-family: 'Zen Kaku Gothic New', sans-serif;
+    font-size: 18px;
+    color: #8686a0;
+    letter-spacing: 0.02em;
+  }
+
+  /* brand mark — same SVG as the app header */
+  .brand {
+    position: absolute;
+    top: 48px;
+    right: 72px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 1;
+  }
+  .brand-name {
+    font-family: 'M PLUS Rounded 1c', sans-serif;
+    font-weight: 800;
+    font-size: 22px;
+    color: #2a2a33;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <span class="blob b1"></span>
+  <span class="blob b2"></span>
+  <span class="blob b3"></span>
+  <span class="blob b4"></span>
+
+  <div class="brand">
+    <svg viewBox="0 0 64 64" width="36" height="36">
+      <rect width="64" height="64" rx="16" fill="#ed3a8c"/>
+      <circle cx="50" cy="15" r="6" fill="#eff33c"/>
+      <circle cx="28" cy="30" r="12" fill="none" stroke="#fff" stroke-width="5"/>
+      <line x1="37" y1="39" x2="49" y2="51" stroke="#fff" stroke-width="6" stroke-linecap="round"/>
+    </svg>
+    <span class="brand-name">Creator Discovery</span>
+  </div>
+
+  <div class="content">
+    <div class="eyebrow">creator discovery</div>
+    <h1 class="heading">作り手から、作品、<br>そしてアニメへ。</h1>
+    <p class="sub">好きな作者・監督・声優・制作会社から、<br>次に見る一本を見つける</p>
+  </div>
+
+  <div class="footer">Data from AniList・非公式プロジェクト</div>
+</div>
+</body>
+</html>
