@@ -56,7 +56,7 @@
              見出し・説明の下、検索ボックスの上に中央寄せで置く＝検索バーと結果の間に挟まらない。
              「見出しの右に小さく」は窮屈でレイアウトが崩れる（ユーザー報告 2026-06-15）ため、
              下に中央配置で意図的な hero イラストとして見せる。結果表示中は is-compact で畳む。 -->
-        <NuxtImg src="/mascot.png" alt="Creator Discovery マスコット" class="hero-img-mini" width="420" height="420" loading="lazy" />
+        <img src="/mascot.png" alt="Creator Discovery マスコット" class="hero-img-mini" width="420" height="420" loading="lazy" />
 
         <!-- Search（ヒーローの主役アクション・候補は入力直下にドロップダウン） -->
         <div class="search-hero">
@@ -314,7 +314,7 @@
 
       <!-- 右: ヒーローイラスト（GPT image 2 生成・作り手が作品を生む情景） -->
       <div class="hero-visual" aria-hidden="true">
-        <NuxtImg src="/mascot.png" alt="" class="hero-img" width="420" height="420" fetchpriority="high" />
+        <img src="/mascot.png" alt="" class="hero-img" width="420" height="420" fetchpriority="high" />
       </div>
     </section>
 
@@ -378,7 +378,7 @@
       <div class="works-head">
         <h2>
           {{ worksHeading }}
-          <span v-if="worksLoading" class="works-loading-indicator"><NuxtImg src="/mascot-loading.png" alt="" class="loading-mascot" width="32" height="32" />{{ worksLoadedCount > 0 ? `読み込み中… ${worksLoadedCount}件` : '読み込み中…' }}</span>
+          <span v-if="worksLoading" class="works-loading-indicator"><img src="/mascot-loading.png" alt="" class="loading-mascot" width="32" height="32" />{{ worksLoadedCount > 0 ? `読み込み中… ${worksLoadedCount}件` : '読み込み中…' }}</span>
         </h2>
         <div v-if="(selectedStaff || selectedStudio) && !worksLoading && filteredWorks.length > 0" class="works-actions">
           <button type="button" class="share-btn" @click="copyUrl" title="URLをコピー">🔗 コピー</button>
@@ -693,7 +693,7 @@
 
           <div v-if="mbOpen">
             <p v-if="mbLoading" class="mb-status">
-              <NuxtImg src="/mascot-loading.png" alt="" class="loading-mascot" width="24" height="24" />
+              <img src="/mascot-loading.png" alt="" class="loading-mascot" width="24" height="24" />
               MusicBrainz を検索中…
             </p>
             <p v-else-if="mbError" class="mb-status mb-status-error">{{ mbError }}</p>
