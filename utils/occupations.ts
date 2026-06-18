@@ -51,9 +51,19 @@ export function matchesSearchMode(occ: string[], mode: SearchMode): boolean {
   if (mode === 'writing') return isWritingStaff(occ)
   if (mode === 'chardesign') return isChardesignStaff(occ)
   if (mode === 'music' || mode === 'theme-singer' || mode === 'theme-lyrics' || mode === 'theme-compose') return isMusicPerson(occ)
+  if (mode === 'staff') return isStaffGeneric(occ)
   if (occ.length === 0) return true
   if (mode === 'director') return isDirectorPerson(occ)
   return isAuthorPerson(occ)
+}
+
+const SPECIFIC_MODE_OCCUPATIONS = new Set([
+  ...AUTHOR_OCCUPATIONS, 'Director', 'Chief Director', 'Voice Actor', 'Vocalist',
+  ...WRITING_OCCUPATIONS, ...CHARDESIGN_OCCUPATIONS, ...MUSIC_OCCUPATIONS,
+])
+function isStaffGeneric(occ: string[]): boolean {
+  if (occ.length === 0) return true
+  return occ.some(o => !SPECIFIC_MODE_OCCUPATIONS.has(o))
 }
 
 export function isDirectorRole(role: string): boolean {

@@ -29,15 +29,15 @@ export interface RecentItem {
   type?: string
 }
 
-export type RecentKind = 'creator' | 'title' | 'director' | 'voice' | 'writing' | 'chardesign' | 'music' | 'theme-singer' | 'theme-lyrics' | 'theme-compose' | 'studio'
+export type RecentKind = 'creator' | 'title' | 'director' | 'voice' | 'writing' | 'chardesign' | 'music' | 'theme-singer' | 'theme-lyrics' | 'theme-compose' | 'studio' | 'staff'
 
-export type SearchMode = 'creator' | 'title' | 'director' | 'voice' | 'writing' | 'chardesign' | 'music' | 'theme-singer' | 'theme-lyrics' | 'theme-compose' | 'studio'
+export type SearchMode = 'creator' | 'title' | 'director' | 'voice' | 'writing' | 'chardesign' | 'music' | 'theme-singer' | 'theme-lyrics' | 'theme-compose' | 'studio' | 'staff'
 
 export type SortMode = 'score' | 'pop' | 'new' | 'old' | 'hidden'
 
 export type RoleKey = 'writing' | 'chardesign' | 'creative' | 'music' | 'theme-singer' | 'theme-lyrics' | 'theme-compose'
 
-export type ViewKind = RoleKey | 'creator' | 'director' | 'voice' | 'studio'
+export type ViewKind = RoleKey | 'creator' | 'director' | 'voice' | 'studio' | 'staff'
 
 export interface WorkTitle {
   native: string | null

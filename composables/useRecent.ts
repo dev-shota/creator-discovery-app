@@ -12,6 +12,7 @@ const RECENT_KEYS: Record<RecentKind, string> = {
   'theme-lyrics': 'cd_recent_theme_lyrics',
   'theme-compose': 'cd_recent_theme_compose',
   studio: 'cd_recent_studio',
+  staff: 'cd_recent_staff',
 }
 const RECENT_CAP = 8
 
@@ -34,7 +35,7 @@ function loadRecentKind(kind: RecentKind): RecentItem[] {
 function emptyRecent(): Record<RecentKind, RecentItem[]> {
   return {
     creator: [], title: [], director: [], voice: [], writing: [], chardesign: [],
-    music: [], 'theme-singer': [], 'theme-lyrics': [], 'theme-compose': [], studio: []
+    music: [], 'theme-singer': [], 'theme-lyrics': [], 'theme-compose': [], studio: [], staff: []
   }
 }
 

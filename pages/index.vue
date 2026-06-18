@@ -970,6 +970,7 @@ const SEARCH_TABS_SECONDARY: { mode: SearchMode; label: string }[] = [
   { mode: 'music', label: '劇伴' },
   { mode: 'theme-lyrics', label: '作詞' },
   { mode: 'theme-compose', label: '作曲・編曲' },
+  { mode: 'staff', label: 'スタッフ' },
   { mode: 'studio', label: '制作会社' },
 ]
 // モバイル用 mode-menu とその他の参照（recent 初期化や goToCollaborator）が SEARCH_TABS を
@@ -986,6 +987,7 @@ const SAMPLE_SUGGESTIONS: { mode: SearchMode; name: string; label: string }[] = 
   { mode: 'music', name: '菅野よう子', label: '菅野よう子' },
   { mode: 'writing', name: '岡田麿里', label: '岡田麿里' },
   { mode: 'chardesign', name: '貞本義行', label: '貞本義行' },
+  { mode: 'staff', name: '中村豊', label: '中村豊' },
   { mode: 'studio', name: 'MAPPA', label: 'MAPPA' },
   { mode: 'studio', name: '京都アニメーション', label: '京アニ' },
 ]
@@ -1001,6 +1003,7 @@ const MODE_ICONS: Record<SearchMode, string> = {
   music: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="18" r="3"/><circle cx="18" cy="16" r="3"/><path d="M11 18V5l10-2v13"/></svg>',
   'theme-lyrics': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5z"/></svg>',
   'theme-compose': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M4 20V10M9 20V4M14 20V12M19 20V7"/></svg>',
+  staff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>',
   studio: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 21v-4h6v4M9 9h0M15 9h0M9 13h0M15 13h0"/></svg>',
 }
 function modeIconSvg(mode: SearchMode): string { return MODE_ICONS[mode] ?? '' }
@@ -1017,7 +1020,7 @@ const selectedStudio = ref<StudioCandidate | null>(null)
 const filteredWorks = ref<WorkEdge[]>([])
 // 選択中の作り手の作品が「作者作品」か「監督作品」か（見出しの出し分け＝検索タブと独立。
 // 作品名チューザから監督を選んだ場合も正しく「監督作品」見出しになる）。
-const selectedStaffKind = ref<'author' | 'director' | 'voice' | 'staffrole'>('author')
+const selectedStaffKind = ref<'author' | 'director' | 'voice' | 'staffrole' | 'animestaff'>('author')
 // staffrole（脚本・構成 / キャラ原案）モードのときの見出しラベル（'脚本・構成' 等）。
 const selectedRoleLabel = ref('')
 const selectedStaffRoleKey = ref<RoleKey | null>(null)
@@ -1575,6 +1578,7 @@ function currentViewKind(): ViewKind | '' {
   const k = selectedStaffKind.value
   if (k === 'director') return 'director'
   if (k === 'voice') return 'voice'
+  if (k === 'animestaff') return 'staff'
   if (k === 'staffrole') return selectedStaffRoleKey.value ?? 'writing'
   return 'creator' // author
 }
@@ -1610,7 +1614,7 @@ function restoreFromQuery() {
   // 旧 ?view=creative（脚本・原案の統合ビュー＝既存の共有リンク）は「脚本」タブに寄せる
   // （作品は selectStaffRoleById(id,'creative') が従来どおり統合表示する＝リンクは壊れない）。
   const MODE_MAP: Record<string, SearchMode> = {
-    studio: 'studio', director: 'director', voice: 'voice', creator: 'creator',
+    studio: 'studio', director: 'director', voice: 'voice', creator: 'creator', staff: 'staff',
     chardesign: 'chardesign', music: 'music',
     'theme-singer': 'theme-singer', 'theme-lyrics': 'theme-lyrics', 'theme-compose': 'theme-compose',
   }
@@ -1618,6 +1622,7 @@ function restoreFromQuery() {
   if (view === 'studio') selectStudioById(id)
   else if (view === 'director') selectDirectorById(id, '')
   else if (view === 'voice') selectVoiceById(id, '')
+  else if (view === 'staff') selectStaffGenericById(id, '')
   else if (view === 'creator') selectStaffById(id)
   else selectStaffRoleById(id, '', view as RoleKey)
 }
@@ -2269,6 +2274,37 @@ async function loadDirectorWorks(id: number, mySeq: number) {
   await runWorksBatch(true)
 }
 
+// スタッフモード: 全アニメ参加作をロール制限なしで表示。Animator/Producer 等、
+// 専用モードを持たない職業のキャッチオール。staffRole をそのまま日本語ラベル化して表示。
+async function loadAllAnimeWorks(id: number, mySeq: number) {
+  studioBadges.value = {}
+  expandedStudios.value = new Set()
+  selectedStaffKind.value = 'animestaff'
+  selectedStaffRoleKey.value = null
+  pushView('staff', id)
+  worksCtl = {
+    query: DIRECTOR_WORKS_QUERY,
+    vars: { id },
+    pick: (data) => {
+      const sm = data?.data?.Staff?.staffMedia
+      if (!sm) return null
+      if (selectedStaff.value?.id === id && data.data.Staff?.name) {
+        selectedStaff.value = { ...selectedStaff.value, name: data.data.Staff.name }
+      }
+      return { items: (sm.edges ?? []) as WorkEdge[], hasNextPage: !!sm.pageInfo?.hasNextPage }
+    },
+    transform: (raw: WorkEdge[]) => {
+      const seen = new Set<number>()
+      return raw
+        .filter(e => { if (seen.has(e.node.id)) return false; seen.add(e.node.id); return true })
+        .map(e => ({ staffRole: collabRoleJp(e.staffRole), node: { ...e.node, relations: { edges: [] } } }))
+    },
+    onBatch: async (works) => { await loadCollaborators(works, id, null, mySeq) },
+    seq: mySeq,
+  }
+  await runWorksBatch(true)
+}
+
 // staffrole モード（#2/#3）: シリーズ構成/脚本/キャラ原案 で選ばれた人物の、その役割の
 // アニメ作品を表示する。監督作と同じ ANIME credits を全ページ引き、役割ファミリで絞る＝
 // クリック元のアニメ（けいおん・リズと青い鳥 等）もちゃんと出る。スタジオバッジは付けない。
@@ -2421,6 +2457,13 @@ async function selectStaff(staff: StaffCandidate) {
     $posthog?.capture('creator_viewed', { staff_id: staff.id, staff_name: name, source: `${searchMode.value}_search` })
     loadMusicBrainz(staff.name)
     await loadStaffRoleWorks(staff.id, mySeq, searchMode.value as RoleKey)
+    return
+  }
+  // スタッフモード: 全アニメ参加作をロール制限なしで表示。
+  if (searchMode.value === 'staff') {
+    saveRecent('staff', staff.id, name)
+    $posthog?.capture('creator_viewed', { staff_id: staff.id, staff_name: name, source: 'staff_search' })
+    await loadAllAnimeWorks(staff.id, mySeq)
     return
   }
   // 作者モード。URL（?view=creator&id=…）は loadWorks 内の pushView が載せる。
@@ -2585,6 +2628,12 @@ async function selectRecent(r: RecentItem) {
     await resolveMediaToAuthor(r.id, r.type ?? 'MANGA', r.name)
     return
   }
+  if (mode === 'staff') {
+    saveRecent('staff', r.id, r.name)
+    $posthog?.capture('creator_viewed', { staff_id: r.id, staff_name: r.name, source: 'recent' })
+    await selectStaffGenericById(r.id, r.name)
+    return
+  }
   // creator
   saveRecent('creator', r.id, r.name)
   $posthog?.capture('creator_viewed', { staff_id: r.id, staff_name: r.name, source: 'recent' })
@@ -2602,6 +2651,15 @@ async function selectStaffById(id: number) {
   if (selectedStaff.value?.id === id) {
     setQuerySilently(selectedStaff.value.name.native || selectedStaff.value.name.full)
   }
+}
+
+async function selectStaffGenericById(id: number, name: string) {
+  selectedStudio.value = null
+  mediaAuthorChoices.value = []
+  closeDropdown()
+  const mySeq = ++selectSeq
+  selectedStaff.value = { id, name: { full: name, native: name }, primaryOccupations: [], favourites: null, image: null }
+  await loadAllAnimeWorks(id, mySeq)
 }
 
 const copyToast = ref(false)
@@ -2645,6 +2703,8 @@ function shareOnX() {
     ? `${name}の劇伴・主題歌で一番好きなのは？ →`
     : selectedStaffKind.value === 'staffrole'
     ? `${name}の${selectedRoleLabel.value}担当作で推しはどれ？ →`
+    : selectedStaffKind.value === 'animestaff'
+    ? `${name}の参加作で一番好きなのは？ ${count}作を一覧で →`
     : `${name}の作品で一番好きなのは？ →`
   const hashtags = '#アニメ #CreatorDiscovery'
   const url = window.location.href
@@ -2838,7 +2898,7 @@ function goToCollaborator(c: CollabPerson) {
   if (c.topRole === 'OP/ED歌手') { searchMode.value = 'theme-singer'; saveRecent('theme-singer', c.id, name); selectStaffRoleById(c.id, name, 'theme-singer'); return }
   if (c.topRole === '作詞') { searchMode.value = 'theme-lyrics'; saveRecent('theme-lyrics', c.id, name); selectStaffRoleById(c.id, name, 'theme-lyrics'); return }
   if (c.topRole === '作曲・編曲') { searchMode.value = 'theme-compose'; saveRecent('theme-compose', c.id, name); selectStaffRoleById(c.id, name, 'theme-compose'); return }
-  searchMode.value = 'creator'; saveRecent('creator', c.id, name); selectStaffById(c.id)
+  searchMode.value = 'staff'; saveRecent('staff', c.id, name); selectStaffGenericById(c.id, name)
 }
 
 function goToCollabStudio(s: CollabStudio) {
