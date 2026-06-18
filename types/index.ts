@@ -109,16 +109,6 @@ export interface AuthorChoice {
   roleKey?: 'writing' | 'chardesign' | 'theme-singer' | 'theme-lyrics' | 'theme-compose' | 'music'
 }
 
-export interface RecItem {
-  id: number
-  type: string
-  title: WorkTitle
-  coverImage: { medium: string | null } | null
-  siteUrl: string
-  averageScore: number | null
-  year: number | null
-}
-
 export interface CollabPerson {
   id: number
   name: { full: string; native: string | null }

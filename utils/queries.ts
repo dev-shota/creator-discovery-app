@@ -139,25 +139,6 @@ export const STUDIO_QUERY = `
   }
 `
 
-export const RECOMMENDATIONS_QUERY = `
-  query($id: Int) {
-    Media(id: $id) {
-      recommendations(sort: [RATING_DESC], perPage: 16) {
-        nodes {
-          rating
-          mediaRecommendation {
-            id type
-            title { native romaji english }
-            coverImage { medium }
-            siteUrl
-            averageScore startDate { year }
-          }
-        }
-      }
-    }
-  }
-`
-
 export const COLLAB_QUERY = `
   query($ids: [Int]) {
     Page(perPage: 50) {
