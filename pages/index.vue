@@ -630,7 +630,7 @@
             ><span v-if="affiliateActive" class="ad-badge">広告</span>Amazon で探す</a>
             <a
               v-else
-              :href="`https://anilist.co/${edge.node.type === 'ANIME' ? 'anime' : 'manga'}/${edge.node.id}`"
+              :href="`https://anilist.co/${isReadableFormat(edge.node.format) ? 'manga' : 'anime'}/${edge.node.id}`"
               target="_blank"
               rel="noopener"
               class="work-card-buy work-card-buy--anilist"

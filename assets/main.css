@@ -608,6 +608,13 @@ a {
   .mode-menu {
     display: block;
   }
+  /* 候補ドロップダウン: タップしやすく */
+  .candidate-list {
+    max-height: 60vh;
+  }
+  .candidate-item {
+    padding: 14px 16px;
+  }
 }
 
 /* ── Search row ── */
@@ -1576,12 +1583,81 @@ button.studio-badge {
     left: -90px;
     top: -90px;
   }
+
+  /* ソートボタン: モバイルではコンパクトに */
+  .sort-btn {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  /* 作品コントロール: 縦積み */
+  .works-controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .works-controls-right {
+    justify-content: space-between;
+  }
+
+  /* 購入/詳細リンク: モバイルタップターゲット確保 */
+  .work-card-buy {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+    padding: 6px 0;
+  }
+
+  /* おすすめ/コラボセクション: モバイル余白縮小 */
+  .recs,
+  .collabs-section {
+    padding: 16px;
+  }
+
+  /* 迷ったらナッジ: 全幅 */
+  .pick-nudge {
+    flex-wrap: wrap;
+  }
 }
 
 @media (max-width: 380px) {
+  .page-container {
+    padding: 14px 12px 0;
+  }
+  .hero-title {
+    font-size: 30px;
+  }
+  .eyebrow {
+    font-size: 22px;
+  }
   .works-grid {
     grid-template-columns: 1fr 1fr;
     gap: 12px;
+  }
+  .work-card-body {
+    padding: 8px 10px 12px;
+  }
+  .work-card-title {
+    font-size: 13px;
+  }
+  .chip {
+    padding: 2px 7px;
+    font-size: 10px;
+  }
+  .collabs-section,
+  .recs {
+    padding: 12px;
+  }
+  .collab-card {
+    width: 96px;
+    padding: 10px 6px;
+  }
+  .collab-avatar {
+    width: 44px;
+    height: 44px;
+  }
+  .collab-name {
+    font-size: 11px;
   }
 }
 
@@ -2024,6 +2100,20 @@ button.studio-badge {
 
 /* ── モバイル: 絞り込みパネルを下からのドロワーに（ネイティブポップアップでない） ── */
 @media (max-width: 600px) {
+  /* ソートトグル: スクロール可能を示すフェードマスク */
+  .sort-toggle {
+    -webkit-mask-image: linear-gradient(to right, #000 85%, transparent);
+    mask-image: linear-gradient(to right, #000 85%, transparent);
+    padding-right: 16px;
+  }
+  .sort-toggle::-webkit-scrollbar { display: none; }
+
+  /* アニメ化リンク: タップターゲット確保 */
+  .work-card-anime-link {
+    padding: 4px 0;
+    font-size: 12px;
+  }
+
   .filter-backdrop {
     display: block;
     position: fixed;
